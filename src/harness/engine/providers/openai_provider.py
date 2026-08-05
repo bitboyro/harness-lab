@@ -20,15 +20,7 @@ from typing import Any
 from ..packaging import Call, ToolDef
 from ..provider import Capabilities, Completion, ProviderConfig, Usage
 
-#: USD per million tokens, (input, output). Verified at time of writing and
-#: volatile — the run planner prints projections from these, so stale numbers
-#: mislead a budget decision rather than crashing.
-PRICES: dict[str, tuple[float, float]] = {
-    "gpt-5": (1.25, 10.00),
-    "gpt-5-mini": (0.25, 2.00),
-    "gpt-5-nano": (0.05, 0.40),
-}
-PRICES_VERIFIED = "2026-08-05"
+from ..pricing import ModelPricing, lookup
 
 
 @dataclass
@@ -81,44 +73,24 @@ class OpenAIProvider:
             native_tool_search=False,
         )
 
-    def price_per_mtok(self, model: str) -> tuple[float, float]:
-        """USD per million tokens.
+    def pricing(self, model: str) -> ModelPricing:
+        """Full rate card: cached reads, cache writes, and the long-context tier.
 
-        Raises on an unknown model rather than falling back to a default. This
+        Raises on an unknown model rather than falling back to a default — this
         number is shown to a human approving spend, so a plausible-looking guess
         is worse than a refusal.
-
-        Override per model with ``HARNESS_PRICE_<MODEL>="in,out"`` — the escape
-        hatch for self-hosted or private models that cannot be in a public table.
         """
-        env_key = "HARNESS_PRICE_" + re.sub(r"[^A-Z0-9]", "_", model.upper())
-        if override := os.environ.get(env_key):
-            try:
-                a, b = (float(x) for x in override.split(","))
-                return (a, b)
-            except ValueError as e:
-                raise ValueError(
-                    f"{env_key} must be 'input,output' in USD per Mtok, "
-                    f"got {override!r}"
-                ) from e
+        return lookup(model)
 
-        if model in PRICES:
-            return PRICES[model]
+    def price_per_mtok(self, model: str) -> tuple[float, float]:
+        """Short-context (input, output). For rough projections only.
 
-        # A *dated snapshot* of a known model is that model. Anything else is a
-        # different model: `gpt-5.6-luna` starts with `gpt-5` but is not gpt-5,
-        # and prefix matching would have priced it silently and wrongly.
-        for base, price in PRICES.items():
-            if model.startswith(base) and re.fullmatch(
-                r"-\d{4}-\d{2}-\d{2}", model[len(base):]
-            ):
-                return price
-
-        raise KeyError(
-            f"no price for model {model!r}. Add it to PRICES (last verified "
-            f"{PRICES_VERIFIED}) or set {env_key}='input,output' — guessing here "
-            "would put a wrong number in front of a spend approval."
-        )
+        Kept because the planner's estimate predates a run and cannot know the
+        cache hit rate. Actual cost is computed from real usage via
+        ``pricing.price_run``, which is what any reported figure uses.
+        """
+        rates = lookup(model).short
+        return (rates.input, rates.output)
 
     def submit(
         self,

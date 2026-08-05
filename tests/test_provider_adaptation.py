@@ -18,6 +18,7 @@ from harness.engine.env import load_dotenv
 from harness.engine.loop import AgentRunner
 from harness.engine.packaging import Materials, Provenance, Result
 from harness.engine.provider import ProviderConfig
+from harness.engine.pricing import UnknownModel
 from harness.engine.providers.openai_provider import (
     OpenAIProvider, _unsupported_parameter,
 )
@@ -142,19 +143,19 @@ class _NullExec:
 
 
 def test_price_override_for_models_not_in_the_table(monkeypatch) -> None:
-    """Self-hosted and new models need a price without editing a public table."""
+    """Self-hosted and private models need a price without editing the catalogue."""
     p = OpenAIProvider()
-    with pytest.raises(KeyError, match="no price for model"):
-        p.price_per_mtok("gpt-5.6-luna")
+    with pytest.raises(UnknownModel):
+        p.pricing("some-self-hosted-model")
 
-    monkeypatch.setenv("HARNESS_PRICE_GPT_5_6_LUNA", "1.25,10.0")
-    assert p.price_per_mtok("gpt-5.6-luna") == (1.25, 10.0)
+    monkeypatch.setenv("HARNESS_PRICE_SOME_SELF_HOSTED_MODEL", "1.25,10.0")
+    assert p.price_per_mtok("some-self-hosted-model") == (1.25, 10.0)
 
 
 def test_malformed_price_override_is_rejected(monkeypatch) -> None:
     monkeypatch.setenv("HARNESS_PRICE_X", "cheap")
-    with pytest.raises(ValueError, match="input,output"):
-        OpenAIProvider().price_per_mtok("x")
+    with pytest.raises(ValueError, match="USD per Mtok"):
+        OpenAIProvider().pricing("x")
 
 
 # ---- .env loading --------------------------------------------------------
@@ -181,14 +182,16 @@ def test_real_environment_wins_over_the_file(tmp_path, monkeypatch) -> None:
     assert os.environ["A"] == "from-shell"
 
 
-def test_a_variant_is_not_priced_as_its_prefix() -> None:
-    """gpt-5.6-luna starts with gpt-5 but is a different model."""
+def test_a_variant_is_not_priced_as_its_sibling() -> None:
+    """luna and terra share a prefix and differ 10x in price."""
     p = OpenAIProvider()
-    with pytest.raises(KeyError):
-        p.price_per_mtok("gpt-5.6-luna")
+    assert p.pricing("gpt-5.6-luna").short.input == 0.20
+    assert p.pricing("gpt-5.6-terra").short.input == 2.00
+    with pytest.raises(UnknownModel):
+        p.pricing("gpt-5.6-unreleased")
 
 
 def test_dated_snapshots_inherit_their_base_price() -> None:
-    """A dated snapshot of a model is that model; a variant is not."""
-    assert OpenAIProvider().price_per_mtok("gpt-5-mini-2026-01-15") == \
-        OpenAIProvider().price_per_mtok("gpt-5-mini")
+    """A dated snapshot of a model is that model; a sibling is not."""
+    p = OpenAIProvider()
+    assert p.pricing("gpt-5.6-luna-2026-08-01") == p.pricing("gpt-5.6-luna")

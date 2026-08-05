@@ -30,6 +30,17 @@ from .taskpack import ReportClass, TaskPack
 from .trace import Trace
 
 
+def _pricing_for(provider: Provider, model: str) -> Any:
+    """The rate card, if the provider knows one. Absent is fine; wrong is not."""
+    getter = getattr(provider, "pricing", None)
+    if not getter:
+        return None
+    try:
+        return getter(model)
+    except Exception:  # noqa: BLE001 — an unpriced model still runs, just uncosted
+        return None
+
+
 @dataclass(slots=True)
 class ArmResult:
     preset: str
@@ -82,6 +93,56 @@ class ArmResult:
         ]
         return sum(values) / len(values) if values else None
 
+    def cost(self, pricing: Any) -> Any:
+        """Actual spend across this arm, from real usage.
+
+        Computed from what the provider reported, not from the planner's
+        estimate: the estimate cannot know the cache hit rate, and for a
+        large-static-prefix arm that is most of the answer.
+        """
+        from .pricing import Cost, price_run
+
+        total = Cost()
+        for trace in self.traces:
+            u = trace.usage_total
+            run = price_run(
+                pricing,
+                input_tokens=u.input_tokens,
+                cached_input_tokens=u.cached_input_tokens,
+                output_tokens=u.output_tokens,
+            )
+            total = Cost(
+                fresh_input_usd=total.fresh_input_usd + run.fresh_input_usd,
+                cached_input_usd=total.cached_input_usd + run.cached_input_usd,
+                cache_write_usd=total.cache_write_usd + run.cache_write_usd,
+                output_usd=total.output_usd + run.output_usd,
+                tier=run.tier if run.tier == "long" else total.tier,
+            )
+        return total
+
+    def cost_per_success(self, pricing: Any) -> float | None:
+        """Dollars per successful task.
+
+        The comparable figure across providers — token counts are not, because
+        tokenisers differ (§5.6).
+        """
+        successes = sum(1 for g in self.graded if g.outcome.is_success)
+        if not successes:
+            return None
+        return self.cost(pricing).total_usd / successes
+
+    def cache_hit_rate(self) -> float | None:
+        """How much of the prompt was served from cache.
+
+        The number that decides whether a large static prefix is an asset or a
+        liability: cached reads are ~10x cheaper, but writing the cache costs
+        ~25% *more* than fresh input, so a prefix only pays off once enough runs
+        reuse it.
+        """
+        total = sum(t.usage_total.input_tokens for t in self.traces)
+        cached = sum(t.usage_total.cached_input_tokens for t in self.traces)
+        return cached / total if total else None
+
 
 @dataclass
 class FieldReport:
@@ -92,6 +153,9 @@ class FieldReport:
     selection: dict[str, tuple[int, int]] = field(default_factory=dict)
     unavailable: dict[str, str] = field(default_factory=dict)
     surface_size: int = 0
+    #: Set when the model's rate card is known, so cost can be reported from
+    #: real usage rather than an estimate.
+    pricing: Any = None
 
     # ---- the headline ----------------------------------------------------
 
@@ -142,6 +206,26 @@ class FieldReport:
                 f"{_pct(arm.mean('argument_validity')):>10} "
                 f"{_num(arm.mean('static_context_tokens')):>8}"
             )
+
+        if self.pricing:
+            lines += ["", "  cost (from actual usage):"]
+            lines.append(
+                f"    {'arm':<10} {'total':>10} {'per success':>12} {'cached':>8}"
+            )
+            for name, arm in self.arms.items():
+                cost = arm.cost(self.pricing)
+                per = arm.cost_per_success(self.pricing)
+                lines.append(
+                    f"    {name:<10} "
+                    f"{'$' + format(cost.total_usd, '.4f'):>10} "
+                    f"{('$' + format(per, '.4f')) if per is not None else 'n/a':>12} "
+                    f"{_pct(arm.cache_hit_rate()):>8}"
+                )
+            if any(a.cost(self.pricing).tier == "long" for a in self.arms.values()):
+                lines.append(
+                    "    note: an arm crossed into long-context pricing, which "
+                    "reprices every token, not just the excess."
+                )
 
         if any(a.truncation_rate for a in self.arms.values()):
             lines += ["", "  truncated (hit max_turns, not graded as wrong):"]
@@ -220,6 +304,7 @@ def run_pack(
         report_class=pack.pack.report_class,
         unavailable=pack.unavailable_metrics(),
         surface_size=base_axes.get("surface_size") or len(spec.operations),
+        pricing=_pricing_for(provider, config.model),
     )
 
     for name in presets:
