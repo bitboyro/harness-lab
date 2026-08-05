@@ -59,6 +59,7 @@ class AgentRunner:
             ),
         )
         trace.cost.static_tokens = materials.static_tokens
+        trace.config_snapshot = self._snapshot()
 
         executor = GuardedExecutor(
             inner=self.method.executor(materials),
@@ -77,6 +78,29 @@ class AgentRunner:
             if self.trace_dir:
                 trace.write(self.trace_dir)
         return trace
+
+    def _snapshot(self) -> dict[str, Any]:
+        """How this run was actually configured, not how it was requested.
+
+        ``unsupported_parameters`` is the important field: a model that rejects
+        ``temperature`` runs at whatever its default sampling is, and a reader
+        comparing two arms needs to see that rather than infer it.
+        """
+        rejected = tuple(getattr(self.provider, "unsupported", ()))
+        return {
+            "provider": getattr(self.provider, "name", "?"),
+            "base_url": getattr(self.provider, "base_url", None),
+            "model": self.config.model,
+            "reasoning_effort": self.config.reasoning_effort,
+            "temperature_requested": self.config.temperature,
+            "temperature_applied": (
+                None if "temperature" in rejected else self.config.temperature
+            ),
+            "unsupported_parameters": list(rejected),
+            "max_turns": self.config.max_turns,
+            "caching": self.config.caching,
+            "packaging_method": getattr(self.method, "name", "?"),
+        }
 
     # ---- the loop --------------------------------------------------------
 

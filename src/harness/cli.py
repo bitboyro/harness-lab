@@ -248,6 +248,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from .engine.env import find_and_load
+    loaded = find_and_load()
+    if loaded:
+        # Names only. Reporting which credentials are in play is useful;
+        # printing their values would put secrets in every terminal scrollback.
+        print(f"loaded from .env: {', '.join(loaded)}", file=sys.stderr)
+
     args = build_parser().parse_args(argv)
     return args.func(args)
 

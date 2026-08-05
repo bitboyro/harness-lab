@@ -44,6 +44,9 @@ class OpenAIProvider:
     name: str = "openai"
     api_key_env: str = "OPENAI_API_KEY"
     base_url: str | None = None
+    #: Parameters this model rejected. Learned at run time and recorded in the
+    #: config snapshot so an omitted sampling parameter is never invisible.
+    unsupported: tuple[str, ...] = ()
     _client: Any = None
 
     def __post_init__(self) -> None:
@@ -99,9 +102,18 @@ class OpenAIProvider:
                     f"got {override!r}"
                 ) from e
 
-        for prefix, price in PRICES.items():
-            if model.startswith(prefix):
+        if model in PRICES:
+            return PRICES[model]
+
+        # A *dated snapshot* of a known model is that model. Anything else is a
+        # different model: `gpt-5.6-luna` starts with `gpt-5` but is not gpt-5,
+        # and prefix matching would have priced it silently and wrongly.
+        for base, price in PRICES.items():
+            if model.startswith(base) and re.fullmatch(
+                r"-\d{4}-\d{2}-\d{2}", model[len(base):]
+            ):
                 return price
+
         raise KeyError(
             f"no price for model {model!r}. Add it to PRICES (last verified "
             f"{PRICES_VERIFIED}) or set {env_key}='input,output' — guessing here "
@@ -121,7 +133,7 @@ class OpenAIProvider:
             # unset default silently benchmarks reasoning effort (V3).
             "reasoning": {"effort": config.reasoning_effort},
         }
-        if config.temperature is not None:
+        if config.temperature is not None and "temperature" not in self.unsupported:
             payload["temperature"] = config.temperature
         if tools:
             payload["tools"] = [
@@ -134,8 +146,32 @@ class OpenAIProvider:
                 for t in tools
             ]
 
-        response = self._sdk().responses.create(**payload)
+        response = self._create(payload)
         return self._parse(response)
+
+    def _create(self, payload: dict[str, Any]) -> Any:
+        """Send, and adapt once to a parameter this model does not accept.
+
+        Reasoning models reject ``temperature`` outright. Rather than hardcode a
+        list of which models those are — a list that is wrong the moment a new
+        model ships — the rejection is learned from the API's own error and
+        recorded.
+
+        Recorded, not swallowed: ``unsupported`` is written into the run config
+        snapshot, so a run where temperature was never applied is
+        distinguishable from one where it was set to the same value. Silently
+        dropping a sampling parameter would leave two arms looking identically
+        configured while behaving differently (V3).
+        """
+        try:
+            return self._sdk().responses.create(**payload)
+        except Exception as e:  # noqa: BLE001 — narrowed by inspecting the message
+            param = _unsupported_parameter(e)
+            if not param or param not in payload:
+                raise
+            self.unsupported = (*self.unsupported, param)
+            payload.pop(param)
+            return self._sdk().responses.create(**payload)
 
     def _parse(self, response: Any) -> Completion:
         text_parts: list[str] = []
@@ -175,3 +211,18 @@ class OpenAIProvider:
             stop_reason="tool_calls" if calls else "stop",
             raw=response,
         )
+
+
+def _unsupported_parameter(error: Exception) -> str | None:
+    """Pull the offending parameter name out of a 400.
+
+    Matches the API's own wording rather than a status code, because a 400 that
+    means "your schema is wrong" must not be retried as if it were "this model
+    has no temperature".
+    """
+    message = str(error)
+    if "nsupported parameter" not in message and "not supported with this model" not in message:
+        return None
+    match = re.search(r"'([a-z_]+)' is not supported", message) or \
+        re.search(r"[Uu]nsupported parameter: '([a-z_]+)'", message)
+    return match.group(1) if match else None

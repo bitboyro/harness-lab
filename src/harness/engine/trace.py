@@ -82,6 +82,12 @@ class Trace:
     state_before: Any = None
     state_after: Any = None
     error: str | None = None
+    #: Everything about how this run was configured that is not on the variant:
+    #: model, sampling parameters as *actually applied*, and any the provider
+    #: rejected. A run where temperature was never applied must be
+    #: distinguishable from one where it was set — otherwise two arms look
+    #: identically configured while behaving differently (V3).
+    config_snapshot: dict[str, Any] = field(default_factory=dict)
 
     # ---- accumulation ----------------------------------------------------
 
@@ -124,6 +130,7 @@ class Trace:
                 for k, v in asdict(self.variant).items()
             },
             "mcp_spec_revision": self.mcp_spec_revision,
+            "config_snapshot": self.config_snapshot,
             "started_at": self.started_at,
             "ended_at": self.ended_at,
             "wall_clock_seconds": self.wall_clock_seconds,
