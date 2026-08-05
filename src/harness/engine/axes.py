@@ -1,0 +1,263 @@
+"""Variant axes and presets.
+
+The axis assignment is the primitive; a preset is shorthand for a complete
+assignment. Nothing is defaulted implicitly — a variant with an unset axis is a
+config error, not a variant.
+
+Contract: docs/packaging-method.md
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+from enum import StrEnum
+from typing import Any, Self
+
+
+class Transport(StrEnum):
+    MCP = "mcp"
+    HTTP_REST = "http-rest"
+    IN_PROCESS = "in-process"
+    NONE = "none"
+
+
+class McpRevision(StrEnum):
+    R2026_07_28 = "2026-07-28"
+    LEGACY = "legacy"
+
+
+class Discovery(StrEnum):
+    EAGER_ALL = "eager-all"
+    META_TOOLS = "meta-tools"
+    CODE_FS = "code-fs"
+    RETRIEVAL = "retrieval"
+    DOCS = "docs"
+    NONE = "none"
+
+
+class Invocation(StrEnum):
+    """Three-way, not two.
+
+    ``SHELL`` is freehand curl against written docs (the C arms). ``CODE`` is
+    writing program code against a generated module tree, where intermediate
+    results stay in the sandbox (the D arms). Conflating them would merge the
+    two arms and hide the mechanism each one tests.
+    """
+
+    TOOL_CALL = "tool-call"
+    SHELL = "shell"
+    CODE = "code"
+    NONE = "none"
+
+
+class Instructions(StrEnum):
+    NONE = "none"
+    SKILL_GENERATED_FLAT = "skill-generated-flat"
+    SKILL_GENERATED_PROGRESSIVE = "skill-generated-progressive"
+    SKILL_AUTHORED_FLAT = "skill-authored-flat"
+    SKILL_AUTHORED_PROGRESSIVE = "skill-authored-progressive"
+    DOCS_FLAT = "docs-flat"
+    DOCS_PROGRESSIVE = "docs-progressive"
+
+    @property
+    def is_authored(self) -> bool:
+        """Authored and generated skill results are never pooled (V9)."""
+        return self.value.startswith("skill-authored")
+
+
+class Confirmation(StrEnum):
+    NONE = "none"
+    MRTR = "mrtr"
+
+
+class SchemaDetail(StrEnum):
+    MINIMAL = "minimal"
+    STANDARD = "standard"
+    RICH = "rich"
+
+
+class ResponseShape(StrEnum):
+    AS_IS = "as-is"
+    SPARSE = "sparse"
+    BUDGETED = "budgeted"
+
+
+class ErrorDetail(StrEnum):
+    TERSE = "terse"
+    FIELD_SCOPED = "field-scoped"
+    FIELD_SCOPED_REMEDY = "field-scoped+remedy"
+
+
+class DocBudget(StrEnum):
+    """Swept, never equalized. V2 was dropped; see decisions.md G5."""
+
+    TERSE = "terse"
+    STANDARD = "standard"
+    VERBOSE = "verbose"
+
+
+class Caching(StrEnum):
+    ON = "on"
+    OFF = "off"
+    LIST_CACHEABLE = "list-cacheable"  # protocol-level ttlMs/cacheScope
+
+
+class ConfigError(ValueError):
+    """A variant that cannot be run as specified."""
+
+
+@dataclass(frozen=True, slots=True)
+class Variant:
+    """A complete axis assignment.
+
+    Every field is required. There are no defaults here on purpose: an
+    unset ``reasoning_effort`` silently benchmarks effort levels instead of
+    packaging (V3), and the same failure mode applies to every other axis.
+    Defaults belong in a run plan's ``base``, where they are written down.
+    """
+
+    transport: Transport
+    discovery: Discovery
+    invocation: Invocation
+    instructions: Instructions
+    confirmation: Confirmation
+    schema_detail: SchemaDetail
+    response_shape: ResponseShape
+    error_detail: ErrorDetail
+    doc_budget: DocBudget
+    surface_size: int
+    model: str
+    reasoning_effort: str
+    temperature: float
+    caching: Caching
+    repeats: int
+    mcp_revision: McpRevision | None = None
+    preset: str | None = None
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> None:
+        if self.transport is Transport.MCP and self.mcp_revision is None:
+            raise ConfigError(
+                "mcp_revision is required when transport is 'mcp' — results are "
+                "never pooled across revisions (V10), so it cannot be inferred."
+            )
+        if self.transport is not Transport.MCP and self.mcp_revision is not None:
+            raise ConfigError(
+                f"mcp_revision is meaningless for transport {self.transport!r}; "
+                "leave it unset."
+            )
+        if self.confirmation is Confirmation.MRTR and self.mcp_revision is not McpRevision.R2026_07_28:
+            raise ConfigError(
+                "confirmation 'mrtr' requires mcp_revision '2026-07-28' — MRTR "
+                "does not exist in the legacy revision."
+            )
+        if self.discovery is Discovery.CODE_FS and self.invocation is not Invocation.CODE:
+            raise ConfigError(
+                "discovery 'code-fs' presents an importable module tree; it "
+                "requires invocation 'code'."
+            )
+        if self.surface_size < 0:
+            raise ConfigError("surface_size must be non-negative")
+        if self.repeats < 1:
+            raise ConfigError("repeats must be at least 1")
+
+    def derive(self, **overrides: Any) -> Self:
+        """A copy with axes overridden, re-validated."""
+        return replace(self, **overrides)
+
+    @property
+    def pool_key(self) -> tuple[str, ...]:
+        """Axes across which results must never be pooled.
+
+        Enforced by the report layer. Two runs with different pool keys
+        describe different worlds and averaging them is meaningless.
+        """
+        return (
+            str(self.mcp_revision or "n/a"),
+            "authored" if self.instructions.is_authored else "generated",
+            self.model,
+        )
+
+
+# Partial axis assignments. Structural axes only — affordance and run axes come
+# from the run plan's `base`, so a preset never silently pins them.
+_PRESETS: dict[str, dict[str, Any]] = {
+    "A1": dict(transport=Transport.MCP, discovery=Discovery.EAGER_ALL,
+               invocation=Invocation.TOOL_CALL, instructions=Instructions.NONE,
+               confirmation=Confirmation.NONE),
+    "A2": dict(transport=Transport.MCP, discovery=Discovery.META_TOOLS,
+               invocation=Invocation.TOOL_CALL, instructions=Instructions.NONE,
+               confirmation=Confirmation.NONE),
+    "B1": dict(transport=Transport.MCP, discovery=Discovery.EAGER_ALL,
+               invocation=Invocation.TOOL_CALL,
+               instructions=Instructions.SKILL_GENERATED_FLAT,
+               confirmation=Confirmation.NONE),
+    "B2": dict(transport=Transport.MCP, discovery=Discovery.META_TOOLS,
+               invocation=Invocation.TOOL_CALL,
+               instructions=Instructions.SKILL_GENERATED_FLAT,
+               confirmation=Confirmation.NONE),
+    "B1-auth": dict(transport=Transport.MCP, discovery=Discovery.EAGER_ALL,
+                    invocation=Invocation.TOOL_CALL,
+                    instructions=Instructions.SKILL_AUTHORED_FLAT,
+                    confirmation=Confirmation.NONE),
+    "B2-auth": dict(transport=Transport.MCP, discovery=Discovery.META_TOOLS,
+                    invocation=Invocation.TOOL_CALL,
+                    instructions=Instructions.SKILL_AUTHORED_FLAT,
+                    confirmation=Confirmation.NONE),
+    "C1": dict(transport=Transport.HTTP_REST, discovery=Discovery.DOCS,
+               invocation=Invocation.SHELL, instructions=Instructions.DOCS_FLAT,
+               confirmation=Confirmation.NONE),
+    "C2": dict(transport=Transport.HTTP_REST, discovery=Discovery.DOCS,
+               invocation=Invocation.SHELL,
+               instructions=Instructions.DOCS_PROGRESSIVE,
+               confirmation=Confirmation.NONE),
+    "D1": dict(transport=Transport.MCP, discovery=Discovery.CODE_FS,
+               invocation=Invocation.CODE, instructions=Instructions.NONE,
+               confirmation=Confirmation.NONE),
+    "D2": dict(transport=Transport.MCP, discovery=Discovery.CODE_FS,
+               invocation=Invocation.CODE,
+               instructions=Instructions.SKILL_GENERATED_PROGRESSIVE,
+               confirmation=Confirmation.NONE),
+    "D2-auth": dict(transport=Transport.MCP, discovery=Discovery.CODE_FS,
+                    invocation=Invocation.CODE,
+                    instructions=Instructions.SKILL_AUTHORED_PROGRESSIVE,
+                    confirmation=Confirmation.NONE),
+    "D3": dict(transport=Transport.MCP, discovery=Discovery.META_TOOLS,
+               invocation=Invocation.CODE,
+               instructions=Instructions.SKILL_GENERATED_FLAT,
+               confirmation=Confirmation.NONE),
+    "E1": dict(transport=Transport.MCP, discovery=Discovery.RETRIEVAL,
+               invocation=Invocation.TOOL_CALL, instructions=Instructions.NONE,
+               confirmation=Confirmation.NONE),
+    "M1": dict(transport=Transport.MCP, discovery=Discovery.EAGER_ALL,
+               invocation=Invocation.TOOL_CALL, instructions=Instructions.NONE,
+               confirmation=Confirmation.MRTR, mcp_revision=McpRevision.R2026_07_28),
+    "Z0": dict(transport=Transport.NONE, discovery=Discovery.NONE,
+               invocation=Invocation.NONE, instructions=Instructions.NONE,
+               confirmation=Confirmation.NONE),
+    "Z1": dict(transport=Transport.IN_PROCESS, discovery=Discovery.NONE,
+               invocation=Invocation.NONE, instructions=Instructions.NONE,
+               confirmation=Confirmation.NONE),
+}
+
+PRESET_NAMES = tuple(_PRESETS)
+
+
+def preset(name: str, **base: Any) -> Variant:
+    """Build a Variant from a preset name plus the run plan's base axes.
+
+    ``base`` supplies the affordance and run axes. A preset never pins those —
+    they belong to the comparison, not to the packaging method.
+    """
+    if name not in _PRESETS:
+        raise ConfigError(f"unknown preset {name!r}; known: {', '.join(PRESET_NAMES)}")
+    fields = {**_PRESETS[name], **base, "preset": name}
+    # Presets that do not use MCP must not inherit a revision from `base`.
+    if fields.get("transport") is not Transport.MCP:
+        fields.pop("mcp_revision", None)
+    try:
+        return Variant(**fields)
+    except TypeError as e:
+        raise ConfigError(f"preset {name!r} is missing base axes: {e}") from e
