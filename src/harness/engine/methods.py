@@ -197,7 +197,10 @@ class CodeFsMcp(_Base):
         )
 
     def executor(self, materials: Materials) -> Executor:
-        return code_executor(materials)
+        # BASE_URL is the sandbox's only route to the target. Passed explicitly
+        # rather than inherited: the environment is emptied so the sandbox
+        # cannot read the harness's own credentials.
+        return code_executor(materials, env=_target_env())
 
 
 @dataclass
@@ -237,7 +240,57 @@ class DocsShell(_Base):
         )
 
     def executor(self, materials: Materials) -> Executor:
-        return shell_executor(materials)
+        return shell_executor(materials, env=_target_env())
+
+
+@dataclass
+class RetrievalMcp(_Base):
+    """E1: the harness retrieves top-k schemas; the model never asks.
+
+    The contrast with meta-tools is the point. There, discovery is an action the
+    model spends turns on; here it is done for it, so a poor result separates
+    "the retriever missed" from "the model chose badly" — which the search arm
+    cannot distinguish on its own.
+    """
+
+    name: str = "retrieval-mcp"
+    k: int = 5
+
+    def supports(self, v: Variant) -> bool:
+        return (v.transport is Transport.MCP
+                and v.discovery is Discovery.RETRIEVAL
+                and v.invocation is Invocation.TOOL_CALL)
+
+    def materialize(self, spec: ApiSpec, v: Variant) -> Materials:
+        spec = spec.limited_to(v.surface_size)
+        blocks = [b for b in (_instruction_block(spec, v),) if b]
+        # Retrieval is per-task, so the full surface is materialised here and
+        # narrowed by the runner once it knows the prompt.
+        return generate.assemble(
+            spec, v,
+            context_blocks=tuple(blocks),
+            tools=generate.tool_defs(spec, v.schema_detail),
+            generator="authored" if v.instructions.is_authored else "retrieval-mcp",
+            authored_commit=_authored_commit(v),
+        )
+
+    def narrow(self, spec: ApiSpec, v: Variant, prompt: str) -> Materials:
+        """Re-materialise with only the top-k operations for this task."""
+        from .dispatch import OperationIndex
+        spec = spec.limited_to(v.surface_size)
+        hits = OperationIndex(spec).search(prompt, self.k)
+        kept = tuple(op for op, _ in hits)
+        narrowed = type(spec)(spec.title, spec.version, kept, spec.raw)
+        blocks = [b for b in (_instruction_block(narrowed, v),) if b]
+        return generate.assemble(
+            narrowed, v,
+            context_blocks=tuple(blocks),
+            tools=generate.tool_defs(narrowed, v.schema_detail),
+            generator="retrieval-mcp",
+        )
+
+    def executor(self, materials: Materials) -> Executor:
+        return self.make_executor(materials, None)  # type: ignore[misc,arg-type]
 
 
 @dataclass
@@ -278,6 +331,21 @@ class GoldPreExecuted(_Base):
         return PreExecutedExecutor(self.results)
 
 
+def _target_env() -> dict[str, str]:
+    """What a sandbox is allowed to see.
+
+    An allowlist, not a filter: the sandbox runs model-authored code, and one
+    that can read ``OPENAI_API_KEY`` is not a sandbox. Only the target's own
+    address and credential cross the boundary.
+    """
+    import os
+    allowed = ("BASE_URL", "TARGET_BASE_URL", "TARGET_TOKEN")
+    env = {k: os.environ[k] for k in allowed if k in os.environ}
+    if "BASE_URL" not in env and "TARGET_BASE_URL" in env:
+        env["BASE_URL"] = env["TARGET_BASE_URL"]
+    return env
+
+
 def _authored_commit(v: Variant) -> str | None:
     """The commit that proves an authored skill predates the results (V9)."""
     if not v.instructions.is_authored:
@@ -296,6 +364,7 @@ def register_defaults(make_mcp_executor: ExecutorFactory) -> None:
     """Register the built-in methods. Called once by the runner."""
     register(EagerAllMcp(make_executor=make_mcp_executor))
     register(MetaToolsMcp(make_executor=make_mcp_executor))
+    register(RetrievalMcp(make_executor=make_mcp_executor))
     register(CodeFsMcp())
     register(DocsShell())
     register(NoTools())

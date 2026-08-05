@@ -1,3 +1,7 @@
+.env
+.env.*
+!.env.example
+traces/
 .venv/
 __pycache__/
 *.py[cod]

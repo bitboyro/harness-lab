@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -32,9 +33,21 @@ PRICES_VERIFIED = "2026-08-05"
 
 @dataclass
 class OpenAIProvider:
+    """OpenAI, or anything speaking its API.
+
+    ``OPENAI_BASE_URL`` points this at a self-hosted vLLM, a gateway, or any
+    compatible server. The base URL is recorded on the provider so a run against
+    a self-hosted model is never mistaken for one against the vendor endpoint —
+    they are different measurements even at the same model id.
+    """
+
     name: str = "openai"
     api_key_env: str = "OPENAI_API_KEY"
+    base_url: str | None = None
     _client: Any = None
+
+    def __post_init__(self) -> None:
+        self.base_url = self.base_url or os.environ.get("OPENAI_BASE_URL") or None
 
     def _sdk(self) -> Any:
         if self._client is None:
@@ -51,7 +64,10 @@ class OpenAIProvider:
                     f"{self.api_key_env} is not set. The engine runs offline "
                     "until a provider is actually called."
                 )
-            self._client = OpenAI(api_key=key)
+            kwargs: dict[str, Any] = {"api_key": key}
+            if self.base_url:
+                kwargs["base_url"] = self.base_url
+            self._client = OpenAI(**kwargs)
         return self._client
 
     def capabilities(self) -> Capabilities:
@@ -63,13 +79,33 @@ class OpenAIProvider:
         )
 
     def price_per_mtok(self, model: str) -> tuple[float, float]:
+        """USD per million tokens.
+
+        Raises on an unknown model rather than falling back to a default. This
+        number is shown to a human approving spend, so a plausible-looking guess
+        is worse than a refusal.
+
+        Override per model with ``HARNESS_PRICE_<MODEL>="in,out"`` — the escape
+        hatch for self-hosted or private models that cannot be in a public table.
+        """
+        env_key = "HARNESS_PRICE_" + re.sub(r"[^A-Z0-9]", "_", model.upper())
+        if override := os.environ.get(env_key):
+            try:
+                a, b = (float(x) for x in override.split(","))
+                return (a, b)
+            except ValueError as e:
+                raise ValueError(
+                    f"{env_key} must be 'input,output' in USD per Mtok, "
+                    f"got {override!r}"
+                ) from e
+
         for prefix, price in PRICES.items():
             if model.startswith(prefix):
                 return price
         raise KeyError(
-            f"no price for model {model!r}; add it to PRICES (verified "
-            f"{PRICES_VERIFIED}) rather than guessing — the planner shows this "
-            "number to a human approving spend."
+            f"no price for model {model!r}. Add it to PRICES (last verified "
+            f"{PRICES_VERIFIED}) or set {env_key}='input,output' — guessing here "
+            "would put a wrong number in front of a spend approval."
         )
 
     def submit(

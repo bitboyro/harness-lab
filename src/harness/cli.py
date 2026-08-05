@@ -78,7 +78,39 @@ def cmd_lint(args: argparse.Namespace) -> int:
 
 # ---- T2 ------------------------------------------------------------------
 
+def _mcp_executor_factory(pack, revision):
+    """Build the transport-bound executor the MCP arms need.
+
+    Connects once and reuses the client, so the legacy handshake is paid once
+    per run rather than once per call — otherwise the cost comparison between
+    revisions would be measuring our own client instead of the protocol.
+    """
+    from .engine.executors import McpToolCallExecutor
+    from .engine.mcp import McpClient
+    from .engine.mcp.transport import HttpTransport
+
+    if not pack.api.mcp:
+        return None
+
+    def make(materials, _variant):
+        transport = HttpTransport.from_env(
+            pack.api.mcp.url,
+            auth_type=pack.api.auth.type,
+            auth_env=pack.api.auth.env,
+            header_name=pack.api.auth.header_name,
+        )
+        client = McpClient(transport, revision)
+        client.connect()
+        return McpToolCallExecutor(client)
+
+    return make
+
+
 def cmd_probe(args: argparse.Namespace) -> int:
+    from .engine.axes import McpRevision
+    from .engine.field import run_pack
+    from .engine.methods import register_defaults
+
     spec = load_spec(args.spec)
     base_url = os.environ.get("TARGET_BASE_URL")
     pack = load_pack(args.pack, base_url=base_url,
@@ -87,51 +119,53 @@ def cmd_probe(args: argparse.Namespace) -> int:
     from .engine.providers import get as get_provider
     provider = get_provider(args.provider)
 
-    axes = _base_axes(args)
-    presets = tuple(args.presets or DEFAULT_PROBE_PRESETS)
-    runs = len(presets) * len(pack.tasks) * args.repeats
+    # Resolve spec_revision: auto by asking the server, before spending anything.
+    revision = McpRevision(args.mcp_revision)
+    if pack.api.mcp and pack.api.mcp.spec_revision == "auto":
+        from .engine.mcp import detect_revision
+        from .engine.mcp.transport import probe_server
+        revision = detect_revision(probe_server(pack.api.mcp.url))
+        print(f"detected MCP revision: {revision.value}")
 
+    axes = {**_base_axes(args), "mcp_revision": revision}
+    presets = tuple(args.presets or DEFAULT_PROBE_PRESETS)
+
+    if "Z0" not in presets:
+        print("note: no Z0 in this run. Without the parametric baseline, field "
+              "numbers cannot be read as lift — the model may already know this API.")
+
+    runs = len(presets) * len(pack.tasks) * args.repeats
     in_price, out_price = provider.price_per_mtok(args.model)
     rough = runs * (32_000 / 1e6 * in_price + 4_000 / 1e6 * out_price)
-    print(f"about to run {runs} calls across {len(presets)} variants — "
+    print(f"about to run {runs} runs across {len(presets)} variants — "
           f"rough projection ${rough:,.2f}")
     if not args.yes and not _confirm():
         print("aborted")
         return 1
 
+    register_defaults(_mcp_executor_factory(pack, revision) or (lambda m, v: None))
     config = ProviderConfig(
         model=args.model, reasoning_effort=args.reasoning_effort,
         temperature=args.temperature, max_turns=args.max_turns,
         caching=args.caching == "on",
     )
 
-    for name in presets:
-        variant = preset(name, **axes)
-        method = _METHODS.get(name, EagerAllMcp)()
-        print(f"\n=== {name} ===")
-        for task in pack.tasks:
-            runner = AgentRunner(
-                provider=provider, method=method, spec=spec, variant=variant,
-                config=config,
-                forbidden_calls=pack.safety.forbidden_calls + task.forbidden_calls,
-                trace_dir=args.trace_dir,
-            )
-            trace = runner.run(task.id, task.prompt)
-            values = compute(trace)
-            summary = "  ".join(
-                values[k].render() for k in
-                ("turns", "argument_validity", "static_context_tokens")
-                if k in values
-            )
-            status = "truncated" if trace.truncated else (trace.error or "ok")
-            print(f"  {task.id}: {status}  {summary}")
+    def progress(arm, task, trace, result):
+        status = "truncated" if trace.truncated else result.outcome
+        print(f"  {arm:<8} {task.id:<34} {status}")
 
-    missing = pack.unavailable_metrics()
-    if missing:
-        print("\nnot measurable with this pack:")
-        for metric, reason in sorted(missing.items()):
-            print(f"  {metric} — {reason}")
-    print(f"\n{report_footer(compute(trace))}")
+    report = run_pack(
+        pack, spec, provider, config,
+        presets=presets,
+        base_axes=axes,
+        method_for=lambda name: _METHODS.get(name, EagerAllMcp)(),
+        repeats=args.repeats,
+        trace_dir=args.trace_dir,
+        on_run=progress,
+    )
+
+    print()
+    print(report.render())
     return 0
 
 
