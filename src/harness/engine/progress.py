@@ -77,12 +77,18 @@ def read(directory: str | Path) -> Progress:
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text())
 
+    # A ledger can legitimately hold MORE rows than a naive arms x tasks count
+    # when cells are skipped, and fewer when they are not. Trust the recorded
+    # plan; fall back only for ledgers written before it existed, and never let
+    # the fallback report a total below what is already on disk.
     expected = manifest.get("planned")
     if expected is None and manifest.get("presets") and manifest.get("tasks"):
         # Fallback for older ledgers. Over-counts when cells were skipped.
         expected = (len(manifest["presets"]) * int(manifest["tasks"])
                     * int(manifest.get("repeats", 1)))
     expected = int(expected) if expected else None
+    if expected is not None and expected < len(rows):
+        expected = len(rows)
 
     started_at = None
     elapsed = 0.0
