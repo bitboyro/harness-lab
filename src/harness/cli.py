@@ -297,6 +297,11 @@ def cmd_run(args: argparse.Namespace) -> int:
         for task in tasks
         for repeat in range(args.repeats)
         if (label, task.id, repeat) not in done
+        # Z1 pre-executes reads and hands them over; it has no tools, so it can
+        # never complete a write. Running it on write tasks would spend money to
+        # record a guaranteed 0% and drag its ceiling down with it — the ceiling
+        # is only defined for synthesis.
+        and not (arm == "Z1" and str(task.task_class) != "R")
     ]
     if done:
         print(f"resuming: {len(done)} runs already on disk, {len(planned)} to go")

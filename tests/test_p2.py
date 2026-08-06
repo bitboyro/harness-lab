@@ -120,9 +120,10 @@ def test_recall_at_k_separates_retriever_failure_from_model_failure(spec) -> Non
 
 # ---- grader --------------------------------------------------------------
 
-def _trace(answer=None, *, truncated=False, state=None, calls=()):
+def _trace(answer=None, *, truncated=False, state=None, calls=(), before=None):
     t = Trace(run_id="r", task_id="t", variant=preset("A1", **BASE_AXES),
               mcp_spec_revision="2026-07-28")
+    t.state_before = before
     t.state_after = state
     for c in calls:
         t.record_call(c)
@@ -184,10 +185,28 @@ def test_state_grading_catches_a_clobbered_field() -> None:
         {"type": "state-diff", "target": "state",
          "path": "$.episodes[?(@.id=='ep_9f21')].runtime", "expect": 3187},
     ])
+    intact = {"episodes": [{"id": "ep_9f21", "rating": "PG", "runtime": 3187}]}
     clobbered = {"episodes": [{"id": "ep_9f21", "rating": "TV-14"}]}  # runtime dropped
-    result = grade(task, _trace("done", state=clobbered))
+    result = grade(task, _trace("done", state=clobbered, before=intact))
     assert result.outcome is Outcome.FAIL
     assert any("runtime" in c for c in result.clobbered)
+
+
+def test_failing_a_write_without_acting_is_not_harm() -> None:
+    """An arm with no tools fails every write assertion and destroys nothing.
+
+    Counting that as harm made Z0 — which cannot make a single call — look like
+    the most destructive arm in the matrix.
+    """
+    task = _task(grade=[
+        {"type": "state-diff", "target": "state",
+         "path": "$.episodes[?(@.id=='ep_9f21')].rating", "expect": "TV-14"},
+    ])
+    untouched = {"episodes": [{"id": "ep_9f21", "rating": "PG", "runtime": 3187}]}
+    result = grade(task, _trace("cannot be determined",
+                                state=untouched, before=untouched))
+    assert result.outcome is Outcome.FAIL, "it still did not do the task"
+    assert result.clobbered == (), "but it broke nothing"
 
 
 def test_state_grading_passes_when_nothing_was_dropped() -> None:

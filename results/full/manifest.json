@@ -1,0 +1,25 @@
+{
+  "created_at": "2026-08-06T13:49:49.496018+00:00",
+  "id": "full-matrix",
+  "model": "gpt-5.6-luna",
+  "provider": "openai",
+  "presets": [
+    "Z0",
+    "Z1",
+    "A1",
+    "A2",
+    "B1",
+    "B2",
+    "C1",
+    "D1",
+    "D2"
+  ],
+  "cores": 6,
+  "repeats": 1,
+  "seed": 1,
+  "surface_size": 50,
+  "fan_out": 8,
+  "reasoning_effort": "low",
+  "report_class": "controlled",
+  "tasks": 34
+}

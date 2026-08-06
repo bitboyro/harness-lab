@@ -199,7 +199,9 @@ def run_one(
                 forbidden_calls=tuple(task.forbidden_calls),
                 trace_dir=trace_dir,
             )
+            before = rig.snapshot()
             trace = runner.run(task.id, task.prompt)
+            trace.state_before = before
             trace.state_after = rig.snapshot()
             return trace, grade(task, trace)
         finally:
