@@ -76,16 +76,41 @@ def _instruction_block(spec: ApiSpec, variant: Variant) -> ContextBlock | None:
     )
 
 
+def _skill_roots() -> list["Path"]:
+    """Where an authored skill may live.
+
+    Resolved against the repo root as well as the cwd: a matrix launched from
+    anywhere but the repo root would otherwise fail every -auth arm with a
+    missing-file error, and the failure looks like a config mistake rather than
+    a path bug.
+    """
+    from pathlib import Path
+    import os
+    here = Path(__file__).resolve()
+    # src/harness/engine/methods.py -> repo root
+    repo_root = here.parents[3]
+    roots = [Path.cwd(), repo_root]
+    if override := os.environ.get("HARNESS_SKILLS_DIR"):
+        roots.insert(0, Path(override).parent if Path(override).name == "skills"
+                     else Path(override))
+    return roots
+
+
 def _authored_skill(spec: ApiSpec, variant: Variant) -> str:
     from pathlib import Path
-    path = Path("skills") / f"{spec.title.lower().replace(' ', '-')}.md"
-    if not path.exists():
-        raise FileNotFoundError(
-            f"variant requests {variant.instructions} but {path} does not exist. "
-            "The authored skill must be committed before results are seen (V9) — "
-            "generating one now would defeat the condition."
-        )
-    return path.read_text()
+    name = f"{spec.title.lower().replace(' ', '-')}.md"
+    tried = []
+    for root in _skill_roots():
+        path = Path(root) / "skills" / name
+        tried.append(str(path))
+        if path.exists():
+            return path.read_text()
+    raise FileNotFoundError(
+        f"variant requests {variant.instructions} but no authored skill was "
+        f"found. Looked in: {', '.join(tried)}. The authored skill must be "
+        "committed before results are seen (V9) — generating one now would "
+        "defeat the condition."
+    )
 
 
 def _index_only(reference: str) -> str:
@@ -418,9 +443,15 @@ def _authored_commit(v: Variant) -> str | None:
     if not v.instructions.is_authored:
         return None
     import subprocess
+    from pathlib import Path
+    # Run git in the REPO, not the cwd. This hash is the V9 pre-registration —
+    # the evidence the skill predates the results — so recording "uncommitted"
+    # because the matrix was launched from elsewhere would quietly destroy it.
+    repo_root = Path(__file__).resolve().parents[3]
     try:
         return subprocess.run(
-            ["git", "log", "-1", "--format=%H", "--", "skills/"],
+            ["git", "-C", str(repo_root), "log", "-1", "--format=%H",
+             "--", "skills/"],
             capture_output=True, text=True, check=True,
         ).stdout.strip() or "uncommitted"
     except Exception:  # noqa: BLE001 — absence of git is not a run failure

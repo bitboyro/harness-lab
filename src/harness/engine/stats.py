@@ -184,6 +184,12 @@ CONFIRMATORY: tuple[tuple[str, str, str], ...] = (
     ("C1", "A1", "P2 — freehand curl versus a typed surface (RQ3)"),
     ("D1", "A1", "code execution versus eager-all (2602.15945)"),
     ("D2", "D1", "P4 — a skill on top of code execution"),
+    # V9: the authored-vs-generated gap. Without these the dual condition can be
+    # run and then not tested, which is the failure the condition exists to
+    # prevent. Registered here, before the authored arms have ever run.
+    ("B1-auth", "B1", "P9 — an authored skill beats a generated one (V9)"),
+    ("B2-auth", "B2", "P9 — the same, under discovery"),
+    ("D2-auth", "D2", "P9 — the same, on code execution"),
 )
 
 
