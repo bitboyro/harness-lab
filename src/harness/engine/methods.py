@@ -25,6 +25,21 @@ from .packaging import ContextBlock, CostBreakdown, Executor, Materials, registe
 #: Injected by the runner: builds the transport-bound executor for a variant.
 ExecutorFactory = Callable[[Materials, Variant], Executor]
 
+#: How a sandboxed arm expresses an action.
+#:
+#: This is a fairness control, not a nicety. A tool-call arm gets an unmistakable
+#: affordance from the provider's function-calling channel; a sandbox arm has
+#: only prose. If the prose does not say how to emit a runnable block, the model
+#: answers "cannot be determined" without ever trying — and the arm scores 0%
+#: for a reason that has nothing to do with its packaging. Every sandbox arm
+#: gets the identical wording so none is advantaged by better instructions (V1).
+_CODE_PROTOCOL = (
+    "To run something, reply with a single fenced code block. The block is "
+    "executed in the working directory and you receive its stdout and stderr. "
+    "Only what you print comes back to you. Keep going until you have the "
+    "answer, then reply with the FINAL ANSWER line and no code block."
+)
+
 
 def _instruction_block(spec: ApiSpec, variant: Variant) -> ContextBlock | None:
     """Skill or docs, per the ``instructions`` axis.
@@ -154,14 +169,9 @@ class MetaToolsMcp(_Base):
             blocks.insert(0, ContextBlock(
                 role="system",
                 content=(
-                    # Without this the model has a module tree and no idea it
-                    # is meant to write code — it reads the imports as prose and
-                    # gives up. The code arms need the invocation instruction as
-                    # much as the module tree.
                     "An `api` package is available in the working directory. "
-                    "Write Python in a fenced ```python block to answer the "
-                    "task; it runs in that directory and you get stdout back. "
-                    "Only what you print is visible to you afterwards.\n\n"
+                    "Write Python to answer the task.\n\n"
+                    + _CODE_PROTOCOL + "\n\n"
                     + files[__import__("pathlib").Path("README.md")].decode()
                 ),
                 label="meta-tools-code-index",
@@ -210,7 +220,9 @@ class CodeFsMcp(_Base):
             content=(
                 "An `api` package is available in the working directory. "
                 "Import from `api.operations` and write Python to answer the "
-                "task. Only what you print is visible to you afterwards.\n\n"
+                "task.\n\n"
+                + _CODE_PROTOCOL
+                + "\n\n"
                 + files[__import__("pathlib").Path("README.md")].decode()
             ),
             label="code-fs-index",
@@ -257,7 +269,7 @@ class DocsShell(_Base):
             role="system",
             content=(
                 "You have a bash shell. Use `curl` against $BASE_URL to answer "
-                "the task. Write one script per step; stdout and stderr come back."
+                "the task.\n\n" + _CODE_PROTOCOL
             ),
             label="shell-preamble",
         )

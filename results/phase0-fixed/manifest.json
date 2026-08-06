@@ -1,0 +1,19 @@
+{
+  "created_at": "2026-08-06T12:36:09.814649+00:00",
+  "id": "d1-recheck",
+  "model": "gpt-5.6-luna",
+  "provider": "openai",
+  "presets": [
+    "D1",
+    "C1",
+    "D3"
+  ],
+  "cores": 1,
+  "repeats": 1,
+  "seed": 1,
+  "surface_size": 0,
+  "fan_out": 4,
+  "reasoning_effort": "low",
+  "report_class": "controlled",
+  "tasks": 3
+}
