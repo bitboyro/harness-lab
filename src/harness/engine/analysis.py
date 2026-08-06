@@ -178,6 +178,14 @@ class ArmSummary:
                    if r.get("clobbered") or r.get("forbidden_attempts"))
 
     @property
+    def description(self) -> str:
+        """What this arm actually was, from the row rather than its name."""
+        for row in self.rows:
+            if row.get("axes", {}).get("description"):
+                return str(row["axes"]["description"])
+        return ""
+
+    @property
     def confusion(self) -> Confusion:
         tp = fp = tn = abstained = confident = 0
         for r in self.graded:

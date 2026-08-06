@@ -83,6 +83,16 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
         lines.append(f"Parametric baseline (Z0): {baseline:.0%}")
     lines.append("")
 
+    # --- what each arm is -------------------------------------------------
+    # Printed before the numbers: a table of arm codes means nothing to a reader
+    # who does not already know the design, and the codes are the least
+    # informative thing on the page.
+    described = [(n, a.description) for n, a in sorted(arms.items()) if a.description]
+    if described:
+        lines += ["", "  the arms:"]
+        for name, text in described:
+            lines.append(f"    {name:<9} {text}")
+
     # --- main table -------------------------------------------------------
     header = (f"  {'arm':<8} {'success':>7} {'lift':>6} {'turns':>6} {'calls':>6} "
               f"{'static':>8} {'trunc':>6} {'harm':>5}")

@@ -1,0 +1,23 @@
+{
+  "created_at": "2026-08-06T17:05:49.285014+00:00",
+  "id": "legend-check",
+  "model": "gpt-5.6-luna",
+  "provider": "openai",
+  "presets": [
+    "Z0",
+    "A1",
+    "B1",
+    "D1"
+  ],
+  "cores": 1,
+  "repeats": 1,
+  "seed": 1,
+  "surface_size": 0,
+  "fan_out": 4,
+  "reasoning_effort": "low",
+  "difficulty": "hard",
+  "report_class": "controlled",
+  "tasks": 2,
+  "planned": 8,
+  "resumed": 0
+}

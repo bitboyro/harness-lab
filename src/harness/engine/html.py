@@ -219,6 +219,22 @@ def render_html(report: Report) -> str:
                 f"this.</div>"
             )
 
+    # ---- what the arms are ----------------------------------------------
+    described = [(n, report.arms[n].description) for n in sorted(report.arms)
+                 if report.arms[n].description]
+    if described:
+        out.append("<h2>The arms</h2>")
+        out.append(
+            "<p>Derived from each run's recorded axis assignment, not from the "
+            "preset name — so an arm is described as what it actually was, "
+            "including any sweep override.</p>"
+        )
+        rows = "".join(
+            f"<tr><td><b>{_e(name)}</b></td><td>{_e(text)}</td></tr>"
+            for name, text in described
+        )
+        out.append(f'<div class="scroll"><table>{rows}</table></div>')
+
     # ---- charts ----------------------------------------------------------
     if "lift" in charts:
         out.append("<h2>Lift over baseline</h2>")

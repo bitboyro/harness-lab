@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+from .axes import axis_summary
 from .grader import GradeResult
 from .trace import Trace
 
@@ -68,6 +69,11 @@ class Row:
     seed: int
     surface_size: int
     metrics: dict[str, Any] = field(default_factory=dict)
+    #: The axis assignment that actually ran, plus its derived description.
+    #: Recorded per row rather than looked up from the preset name, because a
+    #: sweep overrides axes and a preset name would then describe something the
+    #: run was not.
+    axes: dict[str, str] = field(default_factory=dict)
 
     def to_json(self) -> str:
         from dataclasses import asdict
@@ -178,4 +184,5 @@ def build_row(
         seed=seed,
         surface_size=trace.variant.surface_size,
         metrics={k: v.value for k, v in metrics.items() if not k.startswith("_")},
+        axes=axis_summary(trace.variant),
     )

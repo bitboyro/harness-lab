@@ -181,6 +181,95 @@ class Variant:
         )
 
 
+#: What each axis value means in plain words. The report renders arm
+#: descriptions from these rather than from a hand-written blurb per preset:
+#: a blurb drifts the moment a preset changes, and the whole point of the
+#: orthogonal axes is that the assignment IS the description.
+_MEANING = {
+    "discovery": {
+        Discovery.EAGER_ALL: "every operation schema loaded upfront",
+        Discovery.META_TOOLS: "3 meta-tools (search/describe/invoke); schemas on demand",
+        Discovery.CODE_FS: "operations as an importable module tree, read on demand",
+        Discovery.RETRIEVAL: "top-k operations retrieved for it; it never asks",
+        Discovery.DOCS: "a written API reference",
+        Discovery.NONE: "nothing to discover",
+    },
+    "invocation": {
+        Invocation.TOOL_CALL: "calls them as native tools",
+        Invocation.SHELL: "writes bash and curls the API",
+        Invocation.CODE: "writes code in a sandbox; intermediate results stay there",
+        Invocation.NONE: "makes no calls",
+    },
+    "instructions": {
+        Instructions.NONE: "no skill or docs",
+        Instructions.SKILL_GENERATED_FLAT: "+ a generated skill (mechanical, from the spec)",
+        Instructions.SKILL_GENERATED_PROGRESSIVE: "+ a generated skill, progressive",
+        Instructions.SKILL_AUTHORED_FLAT: "+ the AUTHORED skill (hand-written)",
+        Instructions.SKILL_AUTHORED_PROGRESSIVE: "+ the AUTHORED skill, progressive",
+        Instructions.DOCS_FLAT: "+ the full written reference",
+        Instructions.DOCS_PROGRESSIVE: "+ an index, details on demand",
+    },
+    "confirmation": {
+        Confirmation.MRTR: "; the server asks before destructive operations",
+        Confirmation.NONE: "",
+    },
+}
+
+#: Why each control exists. Controls are not packaging choices, so describing
+#: them by their axes alone would be true and useless.
+_CONTROL_ROLE = {
+    "Z0": "CONTROL — no tools at all. Measures what the model already knows, "
+          "so every other arm is read as lift over this.",
+    "Z1": "CEILING — the correct API responses are pre-fetched and handed over. "
+          "Shows what is achievable when packaging is not the obstacle. "
+          "Read tasks only: with no tools it cannot perform a write.",
+}
+
+
+def describe(variant: Variant) -> str:
+    """One sentence for an arm, built from its axis assignment.
+
+    Derived, never written down twice: if a preset changes, this changes with
+    it, and a report can never describe an arm as something it was not.
+    """
+    if variant.preset in _CONTROL_ROLE:
+        return _CONTROL_ROLE[variant.preset]
+
+    transport = {
+        Transport.MCP: "MCP",
+        Transport.HTTP_REST: "HTTP",
+        Transport.IN_PROCESS: "in-process",
+        Transport.NONE: "no transport",
+    }[variant.transport]
+
+    parts = [
+        f"{transport}: {_MEANING['discovery'][variant.discovery]}",
+        _MEANING["invocation"][variant.invocation],
+    ]
+    instructions = _MEANING["instructions"][variant.instructions]
+    if instructions:
+        parts.append(instructions)
+    return ", ".join(parts) + _MEANING["confirmation"][variant.confirmation]
+
+
+def axis_summary(variant: Variant) -> dict[str, str]:
+    """The assignment itself, for the ledger. What ran, not what a name implies."""
+    return {
+        "transport": str(variant.transport),
+        "mcp_revision": str(variant.mcp_revision) if variant.mcp_revision else "",
+        "discovery": str(variant.discovery),
+        "invocation": str(variant.invocation),
+        "instructions": str(variant.instructions),
+        "confirmation": str(variant.confirmation),
+        "schema_detail": str(variant.schema_detail),
+        "response_shape": str(variant.response_shape),
+        "error_detail": str(variant.error_detail),
+        "doc_budget": str(variant.doc_budget),
+        "surface_size": str(variant.surface_size),
+        "description": describe(variant),
+    }
+
+
 # Partial axis assignments. Structural axes only — affordance and run axes come
 # from the run plan's `base`, so a preset never silently pins them.
 _PRESETS: dict[str, dict[str, Any]] = {
