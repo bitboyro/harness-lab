@@ -166,6 +166,22 @@ class WorldShape:
     assets_per_episode: int = 3
 
 
+def shape_for_cores(cores: int, base: WorldShape = WorldShape()) -> WorldShape:
+    """Grow a world until it holds at least ``cores`` seasons.
+
+    One core needs one season. Studios are widened rather than seasons deepened,
+    so season numbers stay realistic (a series with 40 seasons would be a
+    conspicuous artifact) and fan-out stays whatever the sweep set it to.
+    """
+    from dataclasses import replace
+
+    per_studio = base.series_per_studio * base.seasons_per_series
+    if per_studio < 1:
+        raise ValueError("series_per_studio and seasons_per_series must be >= 1")
+    studios = max(base.studios, -(-cores // per_studio))  # ceiling division
+    return replace(base, studios=studios)
+
+
 def build_world(seed: int, shape: WorldShape = WorldShape()) -> World:
     """Generate a catalogue. Same seed, same world, every time.
 

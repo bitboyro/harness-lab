@@ -63,6 +63,16 @@ def build_cores(world: World, count: int, *, seed: int = 0) -> list[Core]:
         for series in world.series_of(studio.id)
         for season in world.seasons_of(series.id)
     ]
+    if len(candidates) < count:
+        # Silently returning fewer cores would invalidate the power calculation
+        # that justified the requested number — the run would look adequately
+        # sized and not be.
+        raise ValueError(
+            f"asked for {count} cores but the world holds only {len(candidates)} "
+            f"seasons. Grow it via WorldShape (studios x series_per_studio x "
+            f"seasons_per_series >= {count}) — do not accept fewer, or the "
+            "power figures no longer describe this run."
+        )
     rng.shuffle(candidates)
 
     for index, (studio, series, season) in enumerate(candidates[:count]):

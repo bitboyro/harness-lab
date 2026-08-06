@@ -96,29 +96,59 @@ exists to prevent.
 
 ## 4. Power and the minimum detectable effect
 
-Phase 1 as specced: 15 cores × 5 terminals × 6 arms × 3 repeats = 1,350 runs.
+> **Corrected 2026-08-06.** The first version of this section carried MDEs of
+> ≈9 / ≈20 / ≈25 pp. Those were too optimistic: they treated all 225 runs per arm
+> as independent replicates of the difference, which ignores that the size of an
+> arm effect varies from core to core. That heterogeneity does not shrink by
+> adding repeats. The figures below come from
+> `harness.experiment.power`, which is executable and testable, and they are
+> the ones that govern.
 
-Within-core paired contrasts, α = 0.0083 (Holm's first step at six tests),
-power = 0.80, and an intra-core correlation assumed at ρ ≈ 0.3 (conservative;
-re-estimated from Phase 0 and this plan updated **before** Phase 1 if it differs
-materially):
+**The core is the unit of analysis, not the run.** Each core yields one paired
+difference between two arms, and the test is over those differences. Two terms
+drive the variance, and they behave differently:
 
-| Comparison | n per arm | MDE (percentage points) |
-|---|---|---|
-| Arm vs arm, pooled across classes | 225 | ≈ 9 pp |
-| Arm vs arm, within one task class | 45 | ≈ 20 pp |
-| Interaction (arm × class) | — | ≈ 25 pp difference-in-differences |
+- **Measurement noise** — shrinks by averaging more observations inside a core,
+  so repeats help here.
+- **Effect heterogeneity** — how much the arm gap itself differs between cores.
+  This divides by the number of cores and by nothing else. **No number of
+  repeats touches it.**
 
-**Read this honestly: Phase 1 is powered for main effects and underpowered for
-the interaction** — which is the headline result. Two consequences, both decided
-now rather than after seeing the data:
+That is the formal version of "more cores, not more repeats", and it is why the
+two are not interchangeable.
 
-1. If the interaction is the result worth having, cores must increase. **25 cores
-   brings the interaction MDE to roughly 15 pp** at the same repeat count. At
-   luna's rates the whole matrix is on the order of $10–20, so cores are cheap
-   and there is no budget reason to stay underpowered.
-2. If Phase 1 runs at 15 cores anyway, the interaction is reported **with its
-   confidence interval and an explicit underpowered caveat**, never as a null.
+Assumptions: α = 0.0083 (Holm's first step at six tests), power = 0.80,
+ρ ≈ 0.3 within core, effect heterogeneity 0.01, worst-case baseline p = 0.5.
+ρ is re-estimated from Phase 0 and this section updated **before** the main
+matrix if it differs materially.
+
+| Cores | Main effect | Within class | Interaction |
+|---|---|---|---|
+| 15 (as originally specced) | 16.4 pp | 32.0 pp | 23.2 pp |
+| 25 | 12.7 pp | 24.8 pp | 18.0 pp |
+| **40** | 10.0 pp | 19.6 pp | **14.2 pp** |
+| 60 | 8.2 pp | 16.0 pp | 11.6 pp |
+
+To reach a 15 pp detectable effect: **18 cores** for main effects, **36 cores**
+for the interaction, **69 cores** for within-class comparisons.
+
+**Phase 1 at 15 cores is underpowered for everything except main effects**, and
+the interaction — the headline result (P5, RQ4) — needs roughly **40 cores**, not
+the 25 previously claimed. Decided now rather than after seeing data:
+
+1. **Phase 1 runs at 40 cores.** At luna's rates that is single-digit dollars, so
+   there is no budget argument for staying underpowered. Cores are the cheap
+   axis; being unable to answer the study's own question is the expensive one.
+2. **Within-class contrasts stay underpowered** at any plausible size (69 cores
+   for 15 pp, and that is per class). They are therefore **exploratory by
+   construction** and are not on the confirmatory list.
+3. Any contrast that does run underpowered is reported **with its confidence
+   interval and an explicit caveat**, never as a null.
+
+Demonstrating the point, at 25 cores: going from 3 to 30 repeats — ten times the
+runs and ten times the cost — moves the interaction MDE only from 18.0 pp to
+10.9 pp, while going to 81 cores at 3 repeats reaches 10 pp. Repeats are the
+expensive way to buy the wrong thing.
 
 Absence of evidence is not evidence of absence, and an underpowered null will be
 labelled as such.

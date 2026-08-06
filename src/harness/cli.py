@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import argparse
 import os
+
+import yaml
 import sys
 from pathlib import Path
 
@@ -192,6 +194,68 @@ def cmd_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rig(args: argparse.Namespace) -> int:
+    """Generate a controlled rig: OpenAPI spec + task pack, sized deliberately.
+
+    Core count is per-run, not a global constant, because different comparisons
+    need different amounts of data. The power table prints alongside so the size
+    is chosen against what it buys rather than inherited.
+    """
+    import json
+
+    from .engine.taskpack import TaskPack
+    from .experiment.domain import WorldShape, build_world, shape_for_cores
+    from .experiment.openapi import build_spec
+    from .experiment.power import Contrast, analyse, cores_for, report
+    from .experiment.tasks import build_pack
+
+    if args.for_contrast and args.target_mde:
+        contrast = Contrast(args.for_contrast)
+        needed = cores_for(contrast, args.target_mde, repeats=args.repeats)
+        if needed is None:
+            print(f"cannot reach {args.target_mde} pp on {contrast} at any "
+                  "practical core count; relax the target or the design")
+            return 1
+        print(f"{contrast} at {args.target_mde} pp needs {needed} cores "
+              f"({args.repeats} repeats) — using that")
+        cores = needed
+    else:
+        cores = args.cores
+
+    print()
+    print(report(cores, repeats=args.repeats))
+    print()
+
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+
+    # Grow the world to fit the requested cores. Too few would silently
+    # invalidate the power table printed above.
+    shape = shape_for_cores(cores, WorldShape(episodes_per_season=args.fan_out))
+    world = build_world(args.seed, shape)
+    spec = build_spec(args.surface_size)
+    pack = build_pack(world, cores=cores, seed=args.seed,
+                      openapi_path="./catalog.openapi.json")
+
+    # Validate through the public loader — the rig is a consumer of the engine,
+    # so a pack it cannot load is a bug in the rig, not a special case.
+    loaded = TaskPack.parse(pack)
+
+    (out / "catalog.openapi.json").write_text(json.dumps(spec, indent=2))
+    (out / "pack.yaml").write_text(yaml.safe_dump(pack, sort_keys=False))
+
+    operations = len(spec["paths"])
+    print(f"wrote {out}/catalog.openapi.json  ({operations} paths, "
+          f"surface_size={args.surface_size or 'core only'})")
+    print(f"wrote {out}/pack.yaml            ({len(loaded.tasks)} tasks "
+          f"from {cores} cores, seed={args.seed})")
+
+    unanswerable = sum(1 for t in loaded.tasks if not t.answerable)
+    print(f"  {unanswerable} unanswerable tasks (false-positive answering)")
+    print(f"  fan-out {args.fan_out} episodes per season")
+    return 0
+
+
 def _confirm() -> bool:
     if not sys.stdin.isatty():
         return False
@@ -218,6 +282,26 @@ def build_parser() -> argparse.ArgumentParser:
     probe_p.add_argument("--i-know-this-is-production", action="store_true",
                          help="second gate on writes against a real system")
     probe_p.set_defaults(func=cmd_probe)
+
+    rig_p = sub.add_parser("rig", help="generate the controlled rig, sized deliberately")
+    rig_p.add_argument("--out", default="rig", help="output directory")
+    rig_p.add_argument("--cores", type=int, default=40,
+                       help="navigation cores; each yields 5 matched tasks. "
+                            "Drives statistical power — see --for-contrast")
+    rig_p.add_argument("--repeats", type=int, default=3,
+                       help="repeats per task. Reduce measurement noise only; "
+                            "they cannot substitute for cores")
+    rig_p.add_argument("--for-contrast", choices=["main-effect", "within-class",
+                                                  "interaction"],
+                       help="size the rig for this comparison instead of --cores")
+    rig_p.add_argument("--target-mde", type=float,
+                       help="percentage points to detect, with --for-contrast")
+    rig_p.add_argument("--seed", type=int, default=1)
+    rig_p.add_argument("--surface-size", type=int, default=0,
+                       help="pad with distractor operations; 0 = core only")
+    rig_p.add_argument("--fan-out", type=int, default=12,
+                       help="episodes per season; the blast radius on RW-fan tasks")
+    rig_p.set_defaults(func=cmd_rig)
 
     plan_p = sub.add_parser("plan", help="cost projection and approval")
     plan_p.add_argument("plan", type=Path)
