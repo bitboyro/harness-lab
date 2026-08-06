@@ -357,19 +357,45 @@ class NoTools(_Base):
 
 @dataclass
 class GoldPreExecuted(_Base):
-    """Z1: the ceiling. The gold sequence has run; the model only synthesises."""
+    """Z1: the ceiling.
+
+    The gold call sequence is executed *before* the model sees anything, and its
+    results are handed over as context. The model does no tool use at all — it
+    only has to read the data and answer.
+
+    This is what makes every other number interpretable. A 40% success rate
+    means one thing if Z1 scores 100% (the packaging is losing information the
+    model could have used) and something entirely different if Z1 scores 45%
+    (the task is near-impossible however you present it, or the answer key is
+    wrong). Without the ceiling you cannot tell a bad wrapper from a bad task.
+    """
 
     name: str = "z1-pre-executed"
-    results: tuple = ()
+    #: Rendered results of the gold sequence, injected per task by the runner.
+    prefetched: str = ""
 
     def supports(self, v: Variant) -> bool:
         return v.transport is Transport.IN_PROCESS
 
     def materialize(self, spec: ApiSpec, v: Variant) -> Materials:
-        return generate.assemble(spec, v, context_blocks=(), generator="z1-pre-executed")
+        blocks = ()
+        if self.prefetched:
+            blocks = (ContextBlock(
+                role="system",
+                content=(
+                    "The following API responses have already been fetched for "
+                    "you. Answer from them directly; you have no tools.\n\n"
+                    + self.prefetched
+                ),
+                label="z1-prefetched",
+            ),)
+        return generate.assemble(spec, v, context_blocks=blocks,
+                                 generator="z1-pre-executed")
 
     def executor(self, materials: Materials) -> Executor:
-        return PreExecutedExecutor(self.results)
+        # No tools by design. A call here means the arm is misconfigured, and
+        # recording that is more useful than silently succeeding.
+        return PreExecutedExecutor(())
 
 
 def _target_env() -> dict[str, str]:

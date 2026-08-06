@@ -268,9 +268,14 @@ def cmd_run(args: argparse.Namespace) -> int:
     from .experiment.tasks import build_pack
 
     presets = tuple(args.presets or ("Z0", "A1", "A2", "C1", "D1"))
+    # A sweep varies one property of the API while holding packaging fixed.
+    # Each level is tagged onto the arm name so the report never averages
+    # across it — that would answer the wrong question entirely.
+    sweep_values = tuple(args.sweep_error_detail or ())
     shape = shape_for_cores(args.cores, WorldShape(episodes_per_season=args.fan_out))
     pack = TaskPack.parse(build_pack(build_world(args.seed, shape),
-                                     cores=args.cores, seed=args.seed))
+                                     cores=args.cores, seed=args.seed,
+                                     difficulty=args.difficulty))
 
     tasks = list(pack.tasks)
     if args.classes:
@@ -281,12 +286,17 @@ def cmd_run(args: argparse.Namespace) -> int:
     store = ResultStore(args.out)
     done = store.completed() if args.resume else set()
 
+    arm_specs = (
+        [(f"{a}@{v}", a, {"error_detail": ErrorDetail(v)}) for a in presets
+         for v in sweep_values]
+        if sweep_values else [(a, a, {}) for a in presets]
+    )
     planned = [
-        (arm, task, repeat)
-        for arm in presets
+        (label, arm, overrides, task, repeat)
+        for label, arm, overrides in arm_specs
         for task in tasks
         for repeat in range(args.repeats)
-        if (arm, task.id, repeat) not in done
+        if (label, task.id, repeat) not in done
     ]
     if done:
         print(f"resuming: {len(done)} runs already on disk, {len(planned)} to go")
@@ -317,13 +327,14 @@ def cmd_run(args: argparse.Namespace) -> int:
         caching=args.caching == "on",
     )
 
-    for index, (arm, task, repeat) in enumerate(planned, 1):
+    for index, (label, arm, overrides, task, repeat) in enumerate(planned, 1):
         try:
+            variant = preset(arm, **{**axes, **overrides})
             trace, grade = run_one(
-                arm, preset(arm, **axes), task, provider, config,
+                arm, variant, task, provider, config,
                 seed=args.seed, shape=shape, surface_size=args.surface_size,
             )
-            row = build_row(arm=arm, task=task, repeat=repeat, trace=trace,
+            row = build_row(arm=label, task=task, repeat=repeat, trace=trace,
                             grade=grade, metrics=compute(trace),
                             report_class=str(pack.pack.report_class),
                             seed=args.seed)
@@ -331,18 +342,23 @@ def cmd_run(args: argparse.Namespace) -> int:
             # leave two thirds of its results on disk, not nothing.
             store.record(row, trace)
             status = "truncated" if trace.truncated else str(grade.outcome)
-            print(f"  [{index}/{len(planned)}] {arm:<4} {task.id:<26} "
+            print(f"  [{index}/{len(planned)}] {label:<14} {task.id:<26} "
                   f"{status:<15} {len(trace.turns)}t")
         except KeyboardInterrupt:
             print("\ninterrupted — results so far are on disk; --resume continues")
             break
         except Exception as e:  # noqa: BLE001 — one failed run must not end the matrix
-            print(f"  [{index}/{len(planned)}] {arm:<4} {task.id:<26} ERROR "
+            print(f"  [{index}/{len(planned)}] {label:<14} {task.id:<26} ERROR "
                   f"{type(e).__name__}: {str(e)[:50]}")
 
     print()
-    print(render(list(store.rows()), store.manifest(),
-                 report=_build_report(store)))
+    final = _build_report(store)
+    print(render(list(store.rows()), store.manifest(), report=final))
+    from .engine.stats import analyse as analyse_stats
+    stats = analyse_stats(final)
+    if stats.contrasts:
+        print("\n  contrasts:")
+        print(stats.render())
     print(f"\nresults: {args.out}/results.jsonl   traces: {args.out}/traces/")
     print(f"html:    harness report {args.out} --html {args.out}/report.html")
     return 0
@@ -406,6 +422,11 @@ def cmd_report(args: argparse.Namespace) -> int:
         return 0
 
     print(render(rows, store.manifest(), report=report))
+    from .engine.stats import analyse as analyse_stats
+    stats = analyse_stats(report)
+    if stats.contrasts:
+        print("\n  contrasts:")
+        print(stats.render())
     return 0
 
 
@@ -468,6 +489,15 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--max-tasks", type=int, help="cap tasks, for a smoke run")
     run_p.add_argument("--max-turns", type=int, default=12)
     run_p.add_argument("--seed", type=int, default=1)
+    run_p.add_argument("--sweep-error-detail", nargs="*",
+                       choices=[e.value for e in ErrorDetail],
+                       help="run every arm once per error_detail level. Answers: "
+                            "is fixing your error messages cheaper than shipping "
+                            "a skill?")
+    run_p.add_argument("--difficulty", default="standard",
+                       choices=["standard", "hard"],
+                       help="'standard' ceilinged at ~100%% for every arm; "
+                            "'hard' makes the agent search rather than navigate")
     run_p.add_argument("--resume", action="store_true",
                        help="skip runs already in the results directory")
     run_p.add_argument("--yes", action="store_true", help="skip the spend prompt")

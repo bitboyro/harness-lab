@@ -47,12 +47,34 @@ def _longest_episode(world: World, season_id: str) -> Episode:
                key=lambda e: (e.runtime_seconds, e.id))
 
 
-def build_cores(world: World, count: int, *, seed: int = 0) -> list[Core]:
+def _hardest_episode(world: World, season_id: str, predicate: str) -> Episode:
+    episodes = world.episodes_of(season_id)
+    if predicate == "shortest":
+        return min(episodes, key=lambda e: (e.runtime_seconds, e.id))
+    if predicate == "most-assets":
+        return max(episodes, key=lambda e: (len(e.asset_ids), e.id))
+    return max(episodes, key=lambda e: (e.runtime_seconds, e.id))
+
+
+def build_cores(world: World, count: int, *, seed: int = 0,
+                difficulty: str = "standard") -> list[Core]:
     """Navigation cores over the seeded world.
 
-    Each is a three-hop traversal — studio to series to season to episode —
-    because that is the depth at which bare-id references start to cost real
-    calls, and where the packaging differences are predicted to show.
+    ``difficulty`` controls how much work finding the target takes:
+
+      ``standard`` — three hops, a stated studio and season. The original
+        shape. Every arm solved these at ~100%, which is a ceiling: when
+        everyone scores full marks the comparison measures nothing.
+
+      ``hard`` — the target is identified by a *property* rather than a
+        location, so the agent must search rather than navigate: no studio is
+        named, the season is described by content, and the predicate varies
+        (longest / shortest / most assets). Selecting the wrong operation now
+        costs a wrong answer instead of a slower right one.
+
+    Difficulty is a knob rather than a rewrite so the easy set stays available:
+    a ceiling run is still the right control when checking that a change did
+    not break the rig.
     """
     rng = random.Random(seed)
     cores: list[Core] = []
@@ -75,27 +97,54 @@ def build_cores(world: World, count: int, *, seed: int = 0) -> list[Core]:
         )
     rng.shuffle(candidates)
 
+    _PREDICATES = ("longest", "shortest", "most-assets")
+    _PHRASE = {"longest": "longest", "shortest": "shortest",
+               "most-assets": "episode with the most assets in"}
+
     for index, (studio, series, season) in enumerate(candidates[:count]):
-        target = _longest_episode(world, season.id)
         episodes = world.episodes_of(season.id)
-        cores.append(Core(
-            id=f"core-{index:03d}",
-            description=(
+        gold = (
+            {"tool": "list_studios", "method": "GET", "path": "/studios"},
+            {"tool": "list_series", "method": "GET", "path": "/series",
+             "args": {"studio_id": studio.id}},
+            {"tool": "get_series", "method": "GET",
+             "path": f"/series/{series.id}"},
+            {"tool": "list_episodes", "method": "GET",
+             "path": f"/seasons/{season.id}/episodes"},
+        )
+
+        if difficulty == "hard":
+            predicate = _PREDICATES[index % len(_PREDICATES)]
+            target = _hardest_episode(world, season.id, predicate)
+            phrase = _PHRASE[predicate]
+            # No studio named, and the season identified by an episode inside
+            # it rather than by number — so the agent has to search the surface
+            # instead of walking a path it was handed.
+            anchor = episodes[0]
+            description = (
+                f"the {phrase} the season of {series.title!r} that contains "
+                f"the episode titled {anchor.title!r}"
+                if predicate == "most-assets" else
+                f"the {phrase} episode of the season of {series.title!r} that "
+                f"contains the episode titled {anchor.title!r}"
+            )
+            hops = 4
+        else:
+            predicate = "longest"
+            target = _hardest_episode(world, season.id, predicate)
+            description = (
                 f"the longest episode of season {season.number} of the series "
                 f"{series.title!r} produced by {studio.name}"
-            ),
+            )
+            hops = 3
+
+        cores.append(Core(
+            id=f"core-{index:03d}",
+            description=description,
             target=target,
-            hops=3,
+            hops=hops,
             fan_out=len(episodes),
-            gold_calls=(
-                {"tool": "list_studios", "method": "GET", "path": "/studios"},
-                {"tool": "list_series", "method": "GET", "path": "/series",
-                 "args": {"studio_id": studio.id}},
-                {"tool": "get_series", "method": "GET",
-                 "path": f"/series/{series.id}"},
-                {"tool": "list_episodes", "method": "GET",
-                 "path": f"/seasons/{season.id}/episodes"},
-            ),
+            gold_calls=gold,
         ))
     return cores
 
@@ -317,6 +366,7 @@ def build_pack(
     *,
     cores: int = 3,
     seed: int = 0,
+    difficulty: str = "standard",
     pack_id: str = "catalog-controlled",
     openapi_path: str = "./catalog.openapi.json",
 ) -> dict[str, Any]:
@@ -325,7 +375,7 @@ def build_pack(
     Nothing here is special-cased by the engine. If the rig ever needed a
     feature no field user could reach, that would be a design bug.
     """
-    core_list = build_cores(world, cores, seed=seed)
+    core_list = build_cores(world, cores, seed=seed, difficulty=difficulty)
     tasks: list[dict[str, Any]] = []
 
     for core in core_list:

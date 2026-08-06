@@ -182,7 +182,7 @@ def run_one(
 
     with RigInstance(seed=seed, shape=shape or WorldShape(),
                      surface_size=surface_size) as rig:
-        method = _bound_method(preset_name, variant, rig)
+        method = _bound_method(preset_name, variant, rig, task)
 
         # Sandboxed arms reach the API over the socket, so the address has to be
         # in the environment before materials are built.
@@ -210,13 +210,50 @@ def run_one(
                     os.environ[key] = value
 
 
-def _bound_method(preset_name: str, variant: Variant, rig: RigInstance):
+def _bound_method(preset_name: str, variant: Variant, rig: RigInstance,
+                  task=None):
     """A packaging method whose executor is wired to this rig instance."""
     cls = METHOD_FOR_PRESET.get(preset_name)
     if cls is None:
         raise KeyError(f"no packaging method mapped for preset {preset_name!r}")
 
+    if cls is GoldPreExecuted:
+        return cls(prefetched=prefetch_gold(rig, task) if task else "")
     if cls in (EagerAllMcp, MetaToolsMcp, RetrievalMcp):
         return cls(make_executor=lambda materials, _v=None:
                    rig.executor_for(variant, materials))
     return cls()
+
+
+def prefetch_gold(rig: RigInstance, task) -> str:
+    """Run the gold sequence and render its responses for the Z1 context.
+
+    Truncated per response, because an unbounded dump would put Z1 in a
+    different context regime from every other arm and quietly measure long
+    context instead of the ceiling.
+    """
+    import json
+
+    if not task.gold_call_sequence:
+        return ""
+
+    rendered = []
+    for call in task.gold_call_sequence:
+        operation = rig.spec.by_id(call.tool) if call.tool else None
+        method = (call.method or (operation.method.upper() if operation else "GET"))
+        path = call.path or (operation.path if operation else None)
+        if not path:
+            continue
+        args = dict(call.args or {})
+        for key in list(args):
+            token = "{" + key + "}"
+            if token in path:
+                path = path.replace(token, str(args.pop(key)))
+        if "{" in path:
+            # An unresolved template means the gold sequence needs an id only
+            # discoverable at run time; skip rather than send a broken request.
+            continue
+        response = rig.api.handle(method, path, args)
+        body = json.dumps(response.body, default=str)
+        rendered.append(f"### {method} {path}\n{body[:4000]}")
+    return "\n\n".join(rendered)
