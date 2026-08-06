@@ -147,6 +147,33 @@ class MetaToolsMcp(_Base):
     def materialize(self, spec: ApiSpec, v: Variant) -> Materials:
         spec = spec.limited_to(v.surface_size)
         blocks = [b for b in (_instruction_block(spec, v),) if b]
+
+        if v.invocation is Invocation.CODE:
+            # D3: the triad, reached from code rather than as tool calls.
+            files = generate.meta_tool_module(spec)
+            blocks.insert(0, ContextBlock(
+                role="system",
+                content=(
+                    # Without this the model has a module tree and no idea it
+                    # is meant to write code — it reads the imports as prose and
+                    # gives up. The code arms need the invocation instruction as
+                    # much as the module tree.
+                    "An `api` package is available in the working directory. "
+                    "Write Python in a fenced ```python block to answer the "
+                    "task; it runs in that directory and you get stdout back. "
+                    "Only what you print is visible to you afterwards.\n\n"
+                    + files[__import__("pathlib").Path("README.md")].decode()
+                ),
+                label="meta-tools-code-index",
+            ))
+            return generate.assemble(
+                spec, v,
+                context_blocks=tuple(blocks),
+                sandbox_files=files,
+                generator="authored" if v.instructions.is_authored else "meta-tools-code",
+                authored_commit=_authored_commit(v),
+            )
+
         return generate.assemble(
             spec, v,
             context_blocks=tuple(blocks),
@@ -156,6 +183,8 @@ class MetaToolsMcp(_Base):
         )
 
     def executor(self, materials: Materials) -> Executor:
+        if materials.sandbox_files:
+            return code_executor(materials, env=_target_env())
         return self.make_executor(materials, None)  # type: ignore[misc,arg-type]
 
 

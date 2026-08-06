@@ -1,0 +1,222 @@
+"""Instance-per-run wiring: every preset, against a fresh catalog.
+
+The seam between the engine and the rig. One `RigInstance` per run holds a
+freshly seeded API, an MCP surface over it, and an HTTP server in front of it,
+and hands each packaging method the executor it needs.
+
+Isolation is the reason this is per-run rather than per-matrix: a mutating task
+that ran against shared state would contaminate every task after it, and the
+contamination would be invisible in the results (L1, spec §4.4). Building a
+world is milliseconds, so there is no reason to economise here.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+from harness.engine.axes import (
+    Confirmation, Discovery, Invocation, McpRevision, Transport, Variant,
+)
+from harness.engine.executors import (
+    HttpExecutor, McpToolCallExecutor, NullExecutor, PreExecutedExecutor,
+)
+from harness.engine.generate import ApiSpec, load_spec
+from harness.engine.mcp import McpClient
+from harness.engine.methods import (
+    CodeFsMcp, DocsShell, EagerAllMcp, GoldPreExecuted, MetaToolsMcp, NoTools,
+    RetrievalMcp,
+)
+
+from .domain import WorldShape, build_world
+from .http import CatalogServer
+from .mcp_surface import McpSurface, transport_for
+from .openapi import build_spec
+from .server import CatalogApi
+
+#: Which packaging method serves each preset.
+METHOD_FOR_PRESET = {
+    "A1": EagerAllMcp, "B1": EagerAllMcp, "B1-auth": EagerAllMcp,
+    "A2": MetaToolsMcp, "B2": MetaToolsMcp, "B2-auth": MetaToolsMcp,
+    "D3": MetaToolsMcp,
+    "D1": CodeFsMcp, "D2": CodeFsMcp, "D2-auth": CodeFsMcp,
+    "C1": DocsShell, "C2": DocsShell,
+    "E1": RetrievalMcp,
+    "M1": EagerAllMcp,
+    "Z0": NoTools,
+    "Z1": GoldPreExecuted,
+}
+
+
+@dataclass
+class RigInstance:
+    """One seeded catalog plus every surface an arm might need.
+
+    HTTP is started lazily: only the shell and code arms leave this process, and
+    a socket per run for arms that never use one would be waste and a source of
+    flakiness under parallelism.
+    """
+
+    seed: int = 0
+    shape: WorldShape = field(default_factory=WorldShape)
+    surface_size: int = 0
+    api: CatalogApi = field(init=False)
+    spec: ApiSpec = field(init=False)
+    _server: CatalogServer | None = field(default=None, init=False)
+    _surfaces: list[McpSurface] = field(default_factory=list, init=False)
+
+    def __post_init__(self) -> None:
+        self.api = CatalogApi(seed=self.seed, shape=self.shape)
+        self.spec = load_spec(build_spec(self.surface_size))
+
+    # ---- surfaces --------------------------------------------------------
+
+    @property
+    def base_url(self) -> str:
+        """Start HTTP on first use and keep it for the life of the run."""
+        if self._server is None:
+            self._server = CatalogServer(self.api, spec=self.spec).start()
+        return self._server.base_url
+
+    def mcp_client(self, revision: McpRevision,
+                   confirmation: Confirmation = Confirmation.NONE) -> McpClient:
+        transport, surface = transport_for(
+            self.api, self.spec, confirmation=confirmation,
+        )
+        self._surfaces.append(surface)
+        client = McpClient(transport, revision)
+        client.connect()
+        return client
+
+    # ---- the seam --------------------------------------------------------
+
+    def executor_for(self, variant: Variant, materials: Any) -> Any:
+        """The executor this variant needs, bound to this instance."""
+        if variant.transport is Transport.NONE:
+            return NullExecutor()
+
+        if variant.transport is Transport.IN_PROCESS:
+            # Z1 pre-executes the gold sequence; the runner supplies results.
+            return PreExecutedExecutor(())
+
+        if variant.invocation in (Invocation.SHELL, Invocation.CODE):
+            # These run outside the process, so they need the socket. Their
+            # executor is built by the packaging method, which reads BASE_URL
+            # from the environment prepared by `sandbox_env`.
+            return None
+
+        if variant.transport is Transport.MCP:
+            client = self.mcp_client(
+                variant.mcp_revision or McpRevision.R2026_07_28,
+                variant.confirmation,
+            )
+            known = frozenset(t.name for t in materials.tool_defs)
+            executor = McpToolCallExecutor(client, known_tools=known)
+
+            if variant.discovery is Discovery.META_TOOLS:
+                # The triad dispatches onto the very same executor eager-all
+                # uses, so A1 and A2 differ in discovery and nothing else.
+                from harness.engine.dispatch import MetaToolDispatcher
+                return MetaToolDispatcher(self.spec, executor,
+                                          schema_detail=variant.schema_detail)
+            return executor
+
+        return HttpExecutor(send=self.api.as_callable())
+
+    def sandbox_env(self) -> dict[str, str]:
+        """What a sandboxed arm is allowed to see. Only the target's address."""
+        return {"BASE_URL": self.base_url, "TARGET_BASE_URL": self.base_url}
+
+    # ---- state -----------------------------------------------------------
+
+    def snapshot(self) -> dict[str, Any]:
+        return self.api.snapshot()
+
+    def teardown(self) -> None:
+        if self._server is not None:
+            self._server.stop()
+            self._server = None
+
+    def __enter__(self) -> RigInstance:
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self.teardown()
+
+
+def method_for(preset_name: str, rig: RigInstance):
+    """Build the packaging method for a preset, bound to this instance."""
+    cls = METHOD_FOR_PRESET.get(preset_name)
+    if cls is None:
+        raise KeyError(f"no packaging method mapped for preset {preset_name!r}")
+
+    if cls in (EagerAllMcp, MetaToolsMcp, RetrievalMcp):
+        # These need an executor factory; the variant arrives with the call.
+        return cls(make_executor=lambda materials, variant:
+                   rig.executor_for(variant, materials))
+    return cls()
+
+
+def run_one(
+    preset_name: str,
+    variant: Variant,
+    task,
+    provider,
+    config,
+    *,
+    seed: int = 0,
+    shape: WorldShape | None = None,
+    surface_size: int = 0,
+    trace_dir: str | None = None,
+):
+    """One task, one arm, one fresh catalog.
+
+    Returns (trace, grade). State is snapshotted after the run so writes are
+    graded on the server rather than on what the agent claimed — an agent that
+    reports success without acting must score as a failure.
+    """
+    import os
+
+    from harness.engine.grader import grade
+    from harness.engine.loop import AgentRunner
+
+    with RigInstance(seed=seed, shape=shape or WorldShape(),
+                     surface_size=surface_size) as rig:
+        method = _bound_method(preset_name, variant, rig)
+
+        # Sandboxed arms reach the API over the socket, so the address has to be
+        # in the environment before materials are built.
+        restore: dict[str, str | None] = {}
+        if variant.invocation in (Invocation.SHELL, Invocation.CODE):
+            for key, value in rig.sandbox_env().items():
+                restore[key] = os.environ.get(key)
+                os.environ[key] = value
+
+        try:
+            runner = AgentRunner(
+                provider=provider, method=method, spec=rig.spec,
+                variant=variant, config=config,
+                forbidden_calls=tuple(task.forbidden_calls),
+                trace_dir=trace_dir,
+            )
+            trace = runner.run(task.id, task.prompt)
+            trace.state_after = rig.snapshot()
+            return trace, grade(task, trace)
+        finally:
+            for key, value in restore.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+
+def _bound_method(preset_name: str, variant: Variant, rig: RigInstance):
+    """A packaging method whose executor is wired to this rig instance."""
+    cls = METHOD_FOR_PRESET.get(preset_name)
+    if cls is None:
+        raise KeyError(f"no packaging method mapped for preset {preset_name!r}")
+
+    if cls in (EagerAllMcp, MetaToolsMcp, RetrievalMcp):
+        return cls(make_executor=lambda materials, _v=None:
+                   rig.executor_for(variant, materials))
+    return cls()

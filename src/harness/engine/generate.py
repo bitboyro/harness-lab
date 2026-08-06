@@ -331,6 +331,76 @@ def code_module_tree(spec: ApiSpec) -> dict[Path, bytes]:
     return files
 
 
+def meta_tool_module(spec: ApiSpec) -> dict[Path, bytes]:
+    """A module tree exposing the triad rather than one function per operation.
+
+    The D3 arm: discovery happens *inside* the sandbox, on demand, and so do the
+    intermediate results. It separates two things the other arms confound — D1
+    keeps results out of context but still shows every operation up front, while
+    A2 hides the operations but pulls every result into context. D3 does both,
+    and is the only cell that tells you whether the two savings compose.
+    """
+    index = [
+        "from api.discovery import search, describe, invoke",
+        "",
+        f"{len(spec.operations)} operations are available, but their schemas are",
+        "not listed here. Use search(query) to find one, describe(id) to read its",
+        "parameters, then invoke(id, args). Only what you print reaches you.",
+    ]
+    return {
+        Path("api/__init__.py"): b"",
+        Path("api/discovery.py"): _DISCOVERY_STUB.encode(),
+        Path("api/_client.py"): _CLIENT_STUB.encode(),
+        Path("README.md"): "\n".join(index).encode(),
+    }
+
+
+_DISCOVERY_STUB = '''\
+"""Search, describe and invoke — the triad, callable from code.
+
+Schemas are fetched on demand, so nothing enters your context until you ask
+for it, and results stay in this process unless you print them.
+"""
+
+import json
+import os
+import urllib.request
+
+from ._client import call
+
+
+def _meta(path, params=None):
+    base = os.environ.get("BASE_URL", "")
+    url = f"{base}/_meta{path}"
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    with urllib.request.urlopen(url) as response:
+        return json.loads(response.read() or "null")
+
+
+def search(query, limit=10):
+    """Find operations by keyword. Returns ids and one-line summaries."""
+    return _meta("/search", {"query": query, "limit": limit})
+
+
+def describe(operation_id):
+    """Full parameter schema for one operation."""
+    return _meta("/describe", {"operation_id": operation_id})
+
+
+def invoke(operation_id, args=None):
+    """Call an operation by id."""
+    spec = describe(operation_id)
+    path = spec["path"]
+    args = dict(args or {})
+    for key in list(args):
+        token = "{" + key + "}"
+        if token in path:
+            path = path.replace(token, str(args.pop(key)))
+    return call(spec["method"], path, args)
+'''
+
+
 _CLIENT_STUB = '''\
 """Transport for the generated operation modules.
 
