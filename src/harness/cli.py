@@ -381,37 +381,57 @@ def cmd_run(args: argparse.Namespace) -> int:
         caching=args.caching == "on",
     )
 
+    import threading
     import time as _time
-    started_at = _time.time()
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    for index, (label, arm, overrides, task, repeat) in enumerate(planned, 1):
+    started_at = _time.time()
+    # Runs are independent by construction — instance-per-run isolation exists
+    # precisely so they can overlap (G10). Nearly all of a run's 25s is waiting
+    # on the provider, so concurrency buys close to linear speedup until the
+    # rate limit bites.
+    write_lock = threading.Lock()
+    done_count = 0
+
+    def execute(item):
+        label, arm, overrides, task, repeat = item
+        variant = preset(arm, **{**axes, **overrides})
+        trace, grade = run_one(
+            arm, variant, task, provider, config,
+            seed=args.seed, shape=shape, surface_size=args.surface_size,
+        )
+        return label, task, repeat, trace, grade
+
+    with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
+        futures = {pool.submit(execute, item): item for item in planned}
         try:
-            variant = preset(arm, **{**axes, **overrides})
-            trace, grade = run_one(
-                arm, variant, task, provider, config,
-                seed=args.seed, shape=shape, surface_size=args.surface_size,
-            )
-            row = build_row(arm=label, task=task, repeat=repeat, trace=trace,
-                            grade=grade, metrics=compute(trace),
-                            report_class=str(pack.pack.report_class),
-                            seed=args.seed)
-            # Written immediately: a matrix that dies two thirds through must
-            # leave two thirds of its results on disk, not nothing.
-            store.record(row, trace)
-            status = "truncated" if trace.truncated else str(grade.outcome)
-            print(f"  {_progress(index, len(planned), started_at)} "
-                  f"{label:<12} {task.id:<26} {status:<15} {len(trace.turns)}t",
-                  # Unbuffered: redirected to a file, Python buffers stdout and
-                  # the log silently lags minutes behind the actual run — which
-                  # is exactly when you most want to see progress.
-                  flush=True)
+            for future in as_completed(futures):
+                label, arm, overrides, task, repeat = futures[future]
+                done_count += 1
+                try:
+                    label, task, repeat, trace, grade = future.result()
+                    row = build_row(arm=label, task=task, repeat=repeat,
+                                    trace=trace, grade=grade,
+                                    metrics=compute(trace),
+                                    report_class=str(pack.pack.report_class),
+                                    seed=args.seed)
+                    # One writer at a time: the ledger is appended per run so a
+                    # matrix that dies leaves what it finished, and interleaved
+                    # writes would corrupt exactly that guarantee.
+                    with write_lock:
+                        store.record(row, trace)
+                    status = "truncated" if trace.truncated else str(grade.outcome)
+                    detail = f"{len(trace.turns)}t"
+                except Exception as e:  # noqa: BLE001 — one bad run is data
+                    status, detail = "ERROR", f"{type(e).__name__}: {str(e)[:40]}"
+                print(f"  {_progress(done_count, len(planned), started_at)} "
+                      f"{label:<12} {task.id:<26} {status:<15} {detail}",
+                      # Unbuffered: redirected to a file, Python buffers stdout
+                      # and the log lags minutes behind the run.
+                      flush=True)
         except KeyboardInterrupt:
             print("\ninterrupted — results so far are on disk; --resume continues")
-            break
-        except Exception as e:  # noqa: BLE001 — one failed run must not end the matrix
-            print(f"  {_progress(index, len(planned), started_at)} "
-                  f"{label:<12} {task.id:<26} ERROR "
-                  f"{type(e).__name__}: {str(e)[:50]}", flush=True)
+            pool.shutdown(wait=False, cancel_futures=True)
 
     print()
     final = _build_report(store)
@@ -594,6 +614,10 @@ def build_parser() -> argparse.ArgumentParser:
                        choices=["standard", "hard"],
                        help="'standard' ceilinged at ~100%% for every arm; "
                             "'hard' makes the agent search rather than navigate")
+    run_p.add_argument("--concurrency", type=int, default=8,
+                       help="runs in flight at once. Nearly all of a run is "
+                            "provider latency, so this is close to a linear "
+                            "speedup until rate limits bite")
     run_p.add_argument("--resume", action="store_true",
                        help="skip runs already in the results directory")
     run_p.add_argument("--yes", action="store_true", help="skip the spend prompt")

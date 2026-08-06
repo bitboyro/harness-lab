@@ -175,22 +175,12 @@ def run_one(
     graded on the server rather than on what the agent claimed — an agent that
     reports success without acting must score as a failure.
     """
-    import os
-
     from harness.engine.grader import grade
     from harness.engine.loop import AgentRunner
 
     with RigInstance(seed=seed, shape=shape or WorldShape(),
                      surface_size=surface_size) as rig:
         method = _bound_method(preset_name, variant, rig, task)
-
-        # Sandboxed arms reach the API over the socket, so the address has to be
-        # in the environment before materials are built.
-        restore: dict[str, str | None] = {}
-        if variant.invocation in (Invocation.SHELL, Invocation.CODE):
-            for key, value in rig.sandbox_env().items():
-                restore[key] = os.environ.get(key)
-                os.environ[key] = value
 
         try:
             runner = AgentRunner(
@@ -205,11 +195,7 @@ def run_one(
             trace.state_after = rig.snapshot()
             return trace, grade(task, trace)
         finally:
-            for key, value in restore.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
+            pass
 
 
 def _bound_method(preset_name: str, variant: Variant, rig: RigInstance,
@@ -223,8 +209,9 @@ def _bound_method(preset_name: str, variant: Variant, rig: RigInstance,
         return cls(prefetched=prefetch_gold(rig, task) if task else "")
     if cls in (EagerAllMcp, MetaToolsMcp, RetrievalMcp):
         return cls(make_executor=lambda materials, _v=None:
-                   rig.executor_for(variant, materials))
-    return cls()
+                   rig.executor_for(variant, materials),
+                   env=rig.sandbox_env())
+    return cls(env=rig.sandbox_env())
 
 
 def prefetch_gold(rig: RigInstance, task) -> str:

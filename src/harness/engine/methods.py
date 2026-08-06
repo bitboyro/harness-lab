@@ -134,6 +134,11 @@ def _index_only(reference: str) -> str:
 class _Base:
     name: str
     make_executor: ExecutorFactory | None = None
+    #: What a sandboxed arm may see. Carried on the method rather than read from
+    #: os.environ so runs can execute concurrently: a global mutation means two
+    #: parallel runs clobber each other's BASE_URL and silently talk to the
+    #: wrong catalog, which grades as a failure and looks like a model error.
+    env: dict[str, str] | None = None
 
     def executor(self, materials: Materials) -> Executor:
         raise NotImplementedError
@@ -219,7 +224,7 @@ class MetaToolsMcp(_Base):
 
     def executor(self, materials: Materials) -> Executor:
         if materials.sandbox_files:
-            return code_executor(materials, env=_target_env())
+            return code_executor(materials, env=self.env or _target_env())
         return self.make_executor(materials, None)  # type: ignore[misc,arg-type]
 
 
@@ -266,7 +271,7 @@ class CodeFsMcp(_Base):
         # BASE_URL is the sandbox's only route to the target. Passed explicitly
         # rather than inherited: the environment is emptied so the sandbox
         # cannot read the harness's own credentials.
-        return code_executor(materials, env=_target_env())
+        return code_executor(materials, env=self.env or _target_env())
 
 
 @dataclass
@@ -306,7 +311,7 @@ class DocsShell(_Base):
         )
 
     def executor(self, materials: Materials) -> Executor:
-        return shell_executor(materials, env=_target_env())
+        return shell_executor(materials, env=self.env or _target_env())
 
 
 @dataclass
