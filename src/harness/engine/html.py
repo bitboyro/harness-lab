@@ -322,6 +322,11 @@ def render_html(report: Report) -> str:
 
     # ---- tables ----------------------------------------------------------
     out.append("<h2>Details</h2>")
+    out.append("<h3>Answer or abstain</h3>")
+    out.append(_confusion_table(report))
+    out.append("<h3>Effort per run (mean)</h3>")
+    out.append(_effort_table(report))
+    out.append("<h3>Outcomes</h3>")
     out.append(_arm_table(report))
     if len(report.task_classes) > 1:
         out.append("<h3>Success by class</h3>")
@@ -418,6 +423,56 @@ def _arm_table(report: Report) -> str:
             if any(report.below_mde(n) for n in report.arms) else "")
     return (f'<div class="scroll"><table>{head}{"".join(rows)}</table></div>'
             + star)
+
+
+def _confusion_table(report: Report) -> str:
+    head = ("<tr><th>arm</th><th>precision</th><th>recall</th><th>F1</th>"
+            "<th>accuracy</th><th>balanced</th><th>specificity</th><th>MCC</th>"
+            "<th>TP</th><th>FP</th><th>TN</th><th>FN</th></tr>")
+    rows = []
+    for name in sorted(report.arms):
+        c = report.arms[name].confusion
+        if not c.total:
+            continue
+        rows.append(
+            f"<tr><td>{_e(name)}</td><td>{_pct(c.precision)}</td>"
+            f"<td>{_pct(c.recall)}</td><td>{_pct(c.f1)}</td>"
+            f"<td>{_pct(c.accuracy)}</td><td>{_pct(c.balanced_accuracy)}</td>"
+            f"<td>{_pct(c.specificity)}</td>"
+            f"<td>{'n/a' if c.mcc is None else f'{c.mcc:+.2f}'}</td>"
+            f"<td>{c.tp}</td><td>{c.fp}</td><td>{c.tn}</td><td>{c.fn}</td></tr>"
+        )
+    return (f'<div class="scroll"><table>{head}{"".join(rows)}</table></div>'
+            '<p class="note">Precision falls when an arm answers what it should '
+            "have declined; recall falls when it declines what it should have "
+            "answered. Accuracy alone cannot tell those apart, which is why MCC "
+            "sits beside it.</p>")
+
+
+def _effort_table(report: Report) -> str:
+    head = ("<tr><th>arm</th><th>total tokens</th><th>input</th><th>cached</th>"
+            "<th>output</th><th>reasoning</th><th>seconds</th><th>turns</th>"
+            "<th>calls</th></tr>")
+    rows = []
+    for name in sorted(report.arms):
+        a = report.arms[name]
+        total_in = a.mean("input_tokens") or 0.0
+        out = a.mean("output_tokens") or 0.0
+        rows.append(
+            f"<tr><td>{_e(name)}</td><td>{total_in + out:,.0f}</td>"
+            f"<td>{total_in:,.0f}</td>"
+            f"<td>{a.mean('cached_input_tokens') or 0:,.0f}</td>"
+            f"<td>{out:,.0f}</td>"
+            f"<td>{a.mean('reasoning_tokens') or 0:,.0f}</td>"
+            f"<td>{a.mean('wall_clock_seconds') or 0:,.1f}</td>"
+            f"<td>{a.mean('turns') or 0:,.1f}</td>"
+            f"<td>{a.mean('calls') or 0:,.1f}</td></tr>"
+        )
+    grand = sum(r["input_tokens"] + r["output_tokens"] for r in report.rows)
+    return (f'<div class="scroll"><table>{head}{"".join(rows)}</table></div>'
+            f'<p class="note">{grand:,} tokens across {len(report.rows)} runs. '
+            "Token counts are not comparable across providers — compare dollars "
+            "per success, not tokens.</p>")
 
 
 def _class_table(report: Report) -> str:

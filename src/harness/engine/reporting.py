@@ -120,6 +120,43 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
                 f"{('$' + format(per, '.4f')) if per else 'n/a':>12} {hit:>7.0%}"
             )
 
+    # --- classification ---------------------------------------------------
+    # Success rate cannot separate an agent that fabricates from one that gives
+    # up. These can: precision falls when it answers what it should decline,
+    # recall falls when it declines what it should answer.
+    if any(a.confusion.total for a in arms.values()):
+        lines += ["", "  answer-or-abstain (higher is better, except FP):"]
+        lines.append(f"    {'arm':<8} {'prec':>6} {'recall':>7} {'F1':>6} "
+                     f"{'acc':>6} {'bal-acc':>8} {'MCC':>7} {'TP/FP/TN/FN':>14}")
+        for name, arm in sorted(arms.items()):
+            c = arm.confusion
+            if not c.total:
+                continue
+            lines.append(
+                f"    {name:<8} {_pct(c.precision)} {_pct(c.recall):>7} "
+                f"{_pct(c.f1)} {_pct(c.accuracy)} {_pct(c.balanced_accuracy):>8} "
+                f"{('n/a' if c.mcc is None else f'{c.mcc:+.2f}'):>7} "
+                f"{f'{c.tp}/{c.fp}/{c.tn}/{c.fn}':>14}"
+            )
+
+    # --- effort -----------------------------------------------------------
+    lines += ["", "  effort per run (mean):"]
+    lines.append(f"    {'arm':<8} {'tokens':>9} {'in':>8} {'cached':>8} {'out':>7} "
+                 f"{'reason':>7} {'secs':>6} {'turns':>6} {'calls':>6}")
+    for name, arm in sorted(arms.items()):
+        total_in = arm.mean("input_tokens") or 0.0
+        out = arm.mean("output_tokens") or 0.0
+        lines.append(
+            f"    {name:<8} {total_in + out:>9,.0f} {total_in:>8,.0f} "
+            f"{arm.mean('cached_input_tokens') or 0:>8,.0f} {out:>7,.0f} "
+            f"{arm.mean('reasoning_tokens') or 0:>7,.0f} "
+            f"{arm.mean('wall_clock_seconds') or 0:>6.1f} "
+            f"{arm.mean('turns') or 0:>6.1f} {arm.mean('calls') or 0:>6.1f}"
+        )
+
+    grand = sum((r["input_tokens"] + r["output_tokens"]) for r in rows)
+    lines.append(f"    {'ALL':<8} {grand:>9,} tokens across {len(rows)} runs")
+
     # --- safety -----------------------------------------------------------
     silent = {n: a.silent_failure_rate for n, a in arms.items()
               if a.silent_failure_rate}
