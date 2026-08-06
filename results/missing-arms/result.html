@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>missing-arms — harness results</title></head><body><style>
+.viz {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #78776f;
+    --grid: #e6e5e1;
+    --band: #ecebe7;
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --series-3: #1baf7a;
+    --series-4: #eda100;
+    --series-5: #e87ba4;
+    --series-6: #008300;
+    --series-7: #4a3aa7;
+    --series-8: #e34948;
+    --seq-1: #cde2fb;
+    --seq-2: #9ec5f4;
+    --seq-3: #6da7ec;
+    --seq-4: #3987e5;
+    --seq-5: #256abf;
+    --seq-6: #184f95;
+    --seq-7: #0d366b;
+    --ord-1: #86b6ef;
+    --ord-2: #5598e7;
+    --ord-3: #2a78d6;
+    --ord-4: #1c5cab;
+    --ord-5: #104281;
+    --status-good: #0ca30c;
+    --status-warning: #fab219;
+    --status-serious: #ec835a;
+    --status-critical: #d03b3b;
+    --neutral: #b8b7b0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #8f8e85;
+      --grid: #333331;
+      --band: #2a2a28;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+    --seq-1: #0d366b;
+    --seq-2: #184f95;
+    --seq-3: #256abf;
+    --seq-4: #3987e5;
+    --seq-5: #6da7ec;
+    --seq-6: #9ec5f4;
+    --seq-7: #cde2fb;
+    --ord-1: #cde2fb;
+    --ord-2: #9ec5f4;
+    --ord-3: #6da7ec;
+    --ord-4: #3987e5;
+    --ord-5: #184f95;
+      --neutral: #56554f;
+    }
+  }
+  :root[data-theme="dark"] .viz {
+    color-scheme: dark;
+    --surface-1: #1a1a19;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #8f8e85;
+    --grid: #333331;
+    --band: #2a2a28;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+    --seq-1: #0d366b;
+    --seq-2: #184f95;
+    --seq-3: #256abf;
+    --seq-4: #3987e5;
+    --seq-5: #6da7ec;
+    --seq-6: #9ec5f4;
+    --seq-7: #cde2fb;
+    --ord-1: #cde2fb;
+    --ord-2: #9ec5f4;
+    --ord-3: #6da7ec;
+    --ord-4: #3987e5;
+    --ord-5: #184f95;
+    --neutral: #56554f;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.55 ui-sans-serif, system-ui, -apple-system, sans-serif;
+         background: var(--surface-1); color: var(--text-primary); }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 72px; }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; margin: 34px 0 10px; letter-spacing: -0.005em; }
+  h3 { font-size: 12px; margin: 18px 0 6px; color: var(--text-secondary);
+       font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  p  { margin: 0 0 10px; color: var(--text-secondary); }
+  .sub { color: var(--text-muted); font-size: 12px; }
+  .note { font-size: 12px; color: var(--text-muted); margin: 6px 0 0; }
+  .banner { border-left: 3px solid var(--status-warning); padding: 10px 14px;
+            background: var(--band); border-radius: 0 6px 6px 0; margin: 6px 0; }
+  .banner.stop { border-left-color: var(--status-critical); }
+  .banner.ok { border-left-color: var(--status-good); }
+  .banner b { color: var(--text-primary); }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 4px;
+            font-size: 11px; color: var(--text-secondary); }
+  .chip { display: inline-flex; align-items: center; gap: 5px; }
+  .chip i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px;
+          font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 5px 9px; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+           gap: 18px; }
+  .card { border: 1px solid var(--grid); border-radius: 8px; padding: 12px 14px; }
+  .card h4 { margin: 0 0 8px; font-size: 13px; }
+  .kv { display: flex; justify-content: space-between; font-size: 11px;
+        color: var(--text-secondary); padding: 2px 0; }
+  .kv b { color: var(--text-primary); font-weight: 600; }
+  footer { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--grid);
+           font-size: 11px; color: var(--text-muted); }
+
+</style>
+<div class="viz"><div class="wrap"><h1>missing-arms</h1>
+<p class="sub">gpt-5.6-luna · 68 runs · 4 arms · 17 tasks · controlled</p>
+<div class="banner stop"><b>Refusing to pool.</b> These rows describe different worlds and must not be averaged:<ul><li><code>(&#x27;gpt-5.6-luna&#x27;, &#x27;2026-07-28&#x27;, &#x27;generated&#x27;, &#x27;controlled&#x27;)</code></li><li><code>(&#x27;gpt-5.6-luna&#x27;, &#x27;2026-07-28&#x27;, &#x27;none&#x27;, &#x27;controlled&#x27;)</code></li></ul>Split by model, MCP revision or skill condition and report separately.</div>
+<div class="banner"><b>Power.</b> The minimum detectable effect at this sample size is <b>57 pp</b>. Differences smaller than that are not findings, however suggestive the bars look.</div>
+<h2>Where runs end up</h2>
+<div class="legend"><span class="chip"><i style="background:var(--ord-1)"></i>pass</span><span class="chip"><i style="background:var(--ord-2)"></i>correct-refusal</span><span class="chip"><i style="background:var(--ord-3)"></i>fail-hedged</span><span class="chip"><i style="background:var(--ord-4)"></i>fail-confident</span><span class="chip"><i style="background:var(--ord-5)"></i>false-positive</span><span class="chip"><i style="background:var(--neutral)"></i>truncated</span></div>
+<svg viewBox="0 0 680 134" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="Outcome distribution per arm" xmlns="http://www.w3.org/2000/svg" style="max-width:680px"><title>Outcome distribution per arm</title><text x="84" y="33.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">C2</text><rect x="92.0" y="19.0" width="348.7" height="18" rx="2" fill="var(--ord-1)"><title>pass: 11</title></rect><text x="266.4" y="33.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">11</text><rect x="442.7" y="19.0" width="29.9" height="18" rx="2" fill="var(--ord-2)"><title>correct-refusal: 1</title></rect><text x="457.6" y="33.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">1</text><rect x="474.6" y="19.0" width="125.5" height="18" rx="2" fill="var(--ord-3)"><title>fail-hedged: 4</title></rect><text x="537.4" y="33.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">4</text><rect x="602.1" y="19.0" width="29.9" height="18" rx="2" fill="var(--neutral)"><title>truncated: 1</title></rect><text x="617.1" y="33.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">1</text><text x="640" y="33.0" font-size="10" fill="var(--text-muted)">n=17</text><text x="84" y="63.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">D3</text><rect x="92.0" y="49.0" width="412.5" height="18" rx="2" fill="var(--ord-1)"><title>pass: 13</title></rect><text x="298.2" y="63.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">13</text><rect x="506.5" y="49.0" width="61.8" height="18" rx="2" fill="var(--ord-2)"><title>correct-refusal: 2</title></rect><text x="537.4" y="63.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">2</text><rect x="570.2" y="49.0" width="29.9" height="18" rx="2" fill="var(--ord-3)"><title>fail-hedged: 1</title></rect><text x="585.2" y="63.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">1</text><rect x="602.1" y="49.0" width="29.9" height="18" rx="2" fill="var(--ord-4)"><title>fail-confident: 1</title></rect><text x="617.1" y="63.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">1</text><text x="640" y="63.0" font-size="10" fill="var(--text-muted)">n=17</text><text x="84" y="93.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">E1</text><rect x="92.0" y="79.0" width="316.8" height="18" rx="2" fill="var(--ord-1)"><title>pass: 10</title></rect><text x="250.4" y="93.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">10</text><rect x="410.8" y="79.0" width="29.9" height="18" rx="2" fill="var(--ord-2)"><title>correct-refusal: 1</title></rect><text x="425.8" y="93.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">1</text><rect x="442.7" y="79.0" width="125.5" height="18" rx="2" fill="var(--ord-3)"><title>fail-hedged: 4</title></rect><text x="505.5" y="93.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">4</text><rect x="570.2" y="79.0" width="29.9" height="18" rx="2" fill="var(--ord-4)"><title>fail-confident: 1</title></rect><text x="585.2" y="93.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">1</text><rect x="602.1" y="79.0" width="29.9" height="18" rx="2" fill="var(--neutral)"><title>truncated: 1</title></rect><text x="617.1" y="93.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">1</text><text x="640" y="93.0" font-size="10" fill="var(--text-muted)">n=17</text><text x="84" y="123.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">M1</text><rect x="92.0" y="109.0" width="253.1" height="18" rx="2" fill="var(--ord-1)"><title>pass: 8</title></rect><text x="218.5" y="123.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">8</text><rect x="347.1" y="109.0" width="29.9" height="18" rx="2" fill="var(--ord-2)"><title>correct-refusal: 1</title></rect><text x="362.0" y="123.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">1</text><rect x="378.9" y="109.0" width="189.3" height="18" rx="2" fill="var(--ord-3)"><title>fail-hedged: 6</title></rect><text x="473.6" y="123.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">6</text><rect x="570.2" y="109.0" width="29.9" height="18" rx="2" fill="var(--ord-4)"><title>fail-confident: 1</title></rect><text x="585.2" y="123.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">1</text><rect x="602.1" y="109.0" width="29.9" height="18" rx="2" fill="var(--neutral)"><title>truncated: 1</title></rect><text x="617.1" y="123.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">1</text><text x="640" y="123.0" font-size="10" fill="var(--text-muted)">n=17</text></svg>
+<p class="note">Truncated runs hit <code>max_turns</code>. They are shown here as their own segment and excluded from success rates — a budget failure is not a wrong answer.</p>
+<h2>Success by task class</h2>
+<p>Whether the arm ranking reverses between reads and writes (RQ4).</p>
+<div class="legend"><span class="chip"><i style="background:var(--series-1)"></i>R</span><span class="chip"><i style="background:var(--series-2)"></i>RW-fan</span><span class="chip"><i style="background:var(--series-3)"></i>W-irrev</span><span class="chip"><i style="background:var(--series-4)"></i>W-lossy</span><span class="chip"><i style="background:var(--series-5)"></i>W-safe</span></div>
+<svg viewBox="0 0 680 242" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="Success by task class" xmlns="http://www.w3.org/2000/svg" style="max-width:680px"><title>Success by task class</title><text x="84" y="40.5" text-anchor="end" font-size="11" fill="var(--text-secondary)">C2</text><rect x="92" y="14.0" width="402.0" height="7" rx="2" fill="var(--series-1)"><title>R: 75%</title></rect><text x="499.0" y="20.0" font-size="9" fill="var(--text-primary)">75%</text><rect x="92" y="23.0" width="536.0" height="7" rx="2" fill="var(--series-2)"><title>RW-fan: 100%</title></rect><text x="633.0" y="29.0" font-size="9" fill="var(--text-primary)">100%</text><rect x="92" y="32.0" width="357.3" height="7" rx="2" fill="var(--series-3)"><title>W-irrev: 67%</title></rect><text x="454.3" y="38.0" font-size="9" fill="var(--text-primary)">67%</text><rect x="92" y="41.0" width="357.3" height="7" rx="2" fill="var(--series-4)"><title>W-lossy: 67%</title></rect><text x="454.3" y="47.0" font-size="9" fill="var(--text-primary)">67%</text><rect x="92" y="50.0" width="357.3" height="7" rx="2" fill="var(--series-5)"><title>W-safe: 67%</title></rect><text x="454.3" y="56.0" font-size="9" fill="var(--text-primary)">67%</text><text x="84" y="97.5" text-anchor="end" font-size="11" fill="var(--text-secondary)">D3</text><rect x="92" y="71.0" width="428.8" height="7" rx="2" fill="var(--series-1)"><title>R: 80%</title></rect><text x="525.8" y="77.0" font-size="9" fill="var(--text-primary)">80%</text><rect x="92" y="80.0" width="536.0" height="7" rx="2" fill="var(--series-2)"><title>RW-fan: 100%</title></rect><text x="633.0" y="86.0" font-size="9" fill="var(--text-primary)">100%</text><rect x="92" y="89.0" width="357.3" height="7" rx="2" fill="var(--series-3)"><title>W-irrev: 67%</title></rect><text x="454.3" y="95.0" font-size="9" fill="var(--text-primary)">67%</text><rect x="92" y="98.0" width="536.0" height="7" rx="2" fill="var(--series-4)"><title>W-lossy: 100%</title></rect><text x="633.0" y="104.0" font-size="9" fill="var(--text-primary)">100%</text><rect x="92" y="107.0" width="536.0" height="7" rx="2" fill="var(--series-5)"><title>W-safe: 100%</title></rect><text x="633.0" y="113.0" font-size="9" fill="var(--text-primary)">100%</text><text x="84" y="154.5" text-anchor="end" font-size="11" fill="var(--text-secondary)">E1</text><rect x="92" y="128.0" width="402.0" height="7" rx="2" fill="var(--series-1)"><title>R: 75%</title></rect><text x="499.0" y="134.0" font-size="9" fill="var(--text-primary)">75%</text><rect x="92" y="137.0" width="536.0" height="7" rx="2" fill="var(--series-2)"><title>RW-fan: 100%</title></rect><text x="633.0" y="143.0" font-size="9" fill="var(--text-primary)">100%</text><rect x="92" y="146.0" width="357.3" height="7" rx="2" fill="var(--series-3)"><title>W-irrev: 67%</title></rect><text x="454.3" y="152.0" font-size="9" fill="var(--text-primary)">67%</text><rect x="92" y="155.0" width="178.7" height="7" rx="2" fill="var(--series-4)"><title>W-lossy: 33%</title></rect><text x="275.7" y="161.0" font-size="9" fill="var(--text-primary)">33%</text><rect x="92" y="164.0" width="357.3" height="7" rx="2" fill="var(--series-5)"><title>W-safe: 67%</title></rect><text x="454.3" y="170.0" font-size="9" fill="var(--text-primary)">67%</text><text x="84" y="211.5" text-anchor="end" font-size="11" fill="var(--text-secondary)">M1</text><rect x="92" y="185.0" width="402.0" height="7" rx="2" fill="var(--series-1)"><title>R: 75%</title></rect><text x="499.0" y="191.0" font-size="9" fill="var(--text-primary)">75%</text><rect x="92" y="194.0" width="357.3" height="7" rx="2" fill="var(--series-2)"><title>RW-fan: 67%</title></rect><text x="454.3" y="200.0" font-size="9" fill="var(--text-primary)">67%</text><rect x="92" y="203.0" width="178.7" height="7" rx="2" fill="var(--series-3)"><title>W-irrev: 33%</title></rect><text x="275.7" y="209.0" font-size="9" fill="var(--text-primary)">33%</text><rect x="92" y="212.0" width="357.3" height="7" rx="2" fill="var(--series-4)"><title>W-lossy: 67%</title></rect><text x="454.3" y="218.0" font-size="9" fill="var(--text-primary)">67%</text><rect x="92" y="221.0" width="178.7" height="7" rx="2" fill="var(--series-5)"><title>W-safe: 33%</title></rect><text x="275.7" y="227.0" font-size="9" fill="var(--text-primary)">33%</text></svg>
+<h2>Answer or abstain</h2>
+<p>A success rate cannot separate an agent that fabricates an answer from one that gives up. Both fail; only the first is dangerous.</p>
+<div class="grid2">
+<div class="card"><h4>C2</h4>
+<svg viewBox="0 0 260 114" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="C2 confusion matrix" xmlns="http://www.w3.org/2000/svg" style="max-width:260px"><title>C2 confusion matrix</title><text x="111.0" y="15" text-anchor="middle" font-size="10" fill="var(--text-secondary)">answerable</text><text x="185.0" y="15" text-anchor="middle" font-size="10" fill="var(--text-secondary)">unanswerable</text><text x="66" y="47.0" text-anchor="end" font-size="10" fill="var(--text-secondary)">answered</text><rect x="74" y="22" width="72" height="40" rx="3" fill="var(--seq-7)"/><text x="110.0" y="44.0" text-anchor="middle" font-size="13" fill="var(--surface-1)">11</text><text x="110.0" y="56.0" text-anchor="middle" font-size="8" fill="var(--surface-1)" opacity="0.8">TP</text><rect x="148" y="22" width="72" height="40" rx="3" fill="var(--seq-1)"/><text x="184.0" y="44.0" text-anchor="middle" font-size="13" fill="var(--text-primary)">0</text><text x="184.0" y="56.0" text-anchor="middle" font-size="8" fill="var(--text-primary)" opacity="0.8">FP</text><text x="66" y="89.0" text-anchor="end" font-size="10" fill="var(--text-secondary)">declined</text><rect x="74" y="64" width="72" height="40" rx="3" fill="var(--seq-3)"/><text x="110.0" y="86.0" text-anchor="middle" font-size="13" fill="var(--text-primary)">4</text><text x="110.0" y="98.0" text-anchor="middle" font-size="8" fill="var(--text-primary)" opacity="0.8">FN</text><rect x="148" y="64" width="72" height="40" rx="3" fill="var(--seq-1)"/><text x="184.0" y="86.0" text-anchor="middle" font-size="13" fill="var(--text-primary)">1</text><text x="184.0" y="98.0" text-anchor="middle" font-size="8" fill="var(--text-primary)" opacity="0.8">TN</text></svg>
+<div class="kv"><span>precision</span><b>100%</b></div>
+<div class="kv"><span>recall</span><b>73%</b></div>
+<div class="kv"><span>F1</span><b>85%</b></div>
+<div class="kv"><span>accuracy</span><b>75%</b></div>
+<div class="kv"><span>balanced acc.</span><b>87%</b></div>
+<div class="kv"><span>specificity</span><b>100%</b></div>
+<div class="kv"><span>MCC</span><b>+0.38</b></div>
+<div class="kv"><span>failures: hedged / confident</span><b>4 / 0</b></div>
+</div>
+<div class="card"><h4>D3</h4>
+<svg viewBox="0 0 260 114" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="D3 confusion matrix" xmlns="http://www.w3.org/2000/svg" style="max-width:260px"><title>D3 confusion matrix</title><text x="111.0" y="15" text-anchor="middle" font-size="10" fill="var(--text-secondary)">answerable</text><text x="185.0" y="15" text-anchor="middle" font-size="10" fill="var(--text-secondary)">unanswerable</text><text x="66" y="47.0" text-anchor="end" font-size="10" fill="var(--text-secondary)">answered</text><rect x="74" y="22" width="72" height="40" rx="3" fill="var(--seq-7)"/><text x="110.0" y="44.0" text-anchor="middle" font-size="13" fill="var(--surface-1)">13</text><text x="110.0" y="56.0" text-anchor="middle" font-size="8" fill="var(--surface-1)" opacity="0.8">TP</text><rect x="148" y="22" width="72" height="40" rx="3" fill="var(--seq-1)"/><text x="184.0" y="44.0" text-anchor="middle" font-size="13" fill="var(--text-primary)">0</text><text x="184.0" y="56.0" text-anchor="middle" font-size="8" fill="var(--text-primary)" opacity="0.8">FP</text><text x="66" y="89.0" text-anchor="end" font-size="10" fill="var(--text-secondary)">declined</text><rect x="74" y="64" width="72" height="40" rx="3" fill="var(--seq-1)"/><text x="110.0" y="86.0" text-anchor="middle" font-size="13" fill="var(--text-primary)">2</text><text x="110.0" y="98.0" text-anchor="middle" font-size="8" fill="var(--text-primary)" opacity="0.8">FN</text><rect x="148" y="64" width="72" height="40" rx="3" fill="var(--seq-1)"/><text x="184.0" y="86.0" text-anchor="middle" font-size="13" fill="var(--text-primary)">2</text><text x="184.0" y="98.0" text-anchor="middle" font-size="8" fill="var(--text-primary)" opacity="0.8">TN</text></svg>
+<div class="kv"><span>precision</span><b>100%</b></div>
+<div class="kv"><span>recall</span><b>87%</b></div>
+<div class="kv"><span>F1</span><b>93%</b></div>
+<div class="kv"><span>accuracy</span><b>88%</b></div>
+<div class="kv"><span>balanced acc.</span><b>93%</b></div>
+<div class="kv"><span>specificity</span><b>100%</b></div>
+<div class="kv"><span>MCC</span><b>+0.66</b></div>
+<div class="kv"><span>failures: hedged / confident</span><b>1 / 1</b></div>
+</div>
+<div class="card"><h4>E1</h4>
+<svg viewBox="0 0 260 114" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="E1 confusion matrix" xmlns="http://www.w3.org/2000/svg" style="max-width:260px"><title>E1 confusion matrix</title><text x="111.0" y="15" text-anchor="middle" font-size="10" fill="var(--text-secondary)">answerable</text><text x="185.0" y="15" text-anchor="middle" font-size="10" fill="var(--text-secondary)">unanswerable</text><text x="66" y="47.0" text-anchor="end" font-size="10" fill="var(--text-secondary)">answered</text><rect x="74" y="22" width="72" height="40" rx="3" fill="var(--seq-7)"/><text x="110.0" y="44.0" text-anchor="middle" font-size="13" fill="var(--surface-1)">10</text><text x="110.0" y="56.0" text-anchor="middle" font-size="8" fill="var(--surface-1)" opacity="0.8">TP</text><rect x="148" y="22" width="72" height="40" rx="3" fill="var(--seq-1)"/><text x="184.0" y="44.0" text-anchor="middle" font-size="13" fill="var(--text-primary)">0</text><text x="184.0" y="56.0" text-anchor="middle" font-size="8" fill="var(--text-primary)" opacity="0.8">FP</text><text x="66" y="89.0" text-anchor="end" font-size="10" fill="var(--text-secondary)">declined</text><rect x="74" y="64" width="72" height="40" rx="3" fill="var(--seq-4)"/><text x="110.0" y="86.0" text-anchor="middle" font-size="13" fill="var(--text-primary)">5</text><text x="110.0" y="98.0" text-anchor="middle" font-size="8" fill="var(--text-primary)" opacity="0.8">FN</text><rect x="148" y="64" width="72" height="40" rx="3" fill="var(--seq-1)"/><text x="184.0" y="86.0" text-anchor="middle" font-size="13" fill="var(--text-primary)">1</text><text x="184.0" y="98.0" text-anchor="middle" font-size="8" fill="var(--text-primary)" opacity="0.8">TN</text></svg>
+<div class="kv"><span>precision</span><b>100%</b></div>
+<div class="kv"><span>recall</span><b>67%</b></div>
+<div class="kv"><span>F1</span><b>80%</b></div>
+<div class="kv"><span>accuracy</span><b>69%</b></div>
+<div class="kv"><span>balanced acc.</span><b>83%</b></div>
+<div class="kv"><span>specificity</span><b>100%</b></div>
+<div class="kv"><span>MCC</span><b>+0.33</b></div>
+<div class="kv"><span>failures: hedged / confident</span><b>4 / 1</b></div>
+</div>
+<div class="card"><h4>M1</h4>
+<svg viewBox="0 0 260 114" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="M1 confusion matrix" xmlns="http://www.w3.org/2000/svg" style="max-width:260px"><title>M1 confusion matrix</title><text x="111.0" y="15" text-anchor="middle" font-size="10" fill="var(--text-secondary)">answerable</text><text x="185.0" y="15" text-anchor="middle" font-size="10" fill="var(--text-secondary)">unanswerable</text><text x="66" y="47.0" text-anchor="end" font-size="10" fill="var(--text-secondary)">answered</text><rect x="74" y="22" width="72" height="40" rx="3" fill="var(--seq-7)"/><text x="110.0" y="44.0" text-anchor="middle" font-size="13" fill="var(--surface-1)">8</text><text x="110.0" y="56.0" text-anchor="middle" font-size="8" fill="var(--surface-1)" opacity="0.8">TP</text><rect x="148" y="22" width="72" height="40" rx="3" fill="var(--seq-1)"/><text x="184.0" y="44.0" text-anchor="middle" font-size="13" fill="var(--text-primary)">0</text><text x="184.0" y="56.0" text-anchor="middle" font-size="8" fill="var(--text-primary)" opacity="0.8">FP</text><text x="66" y="89.0" text-anchor="end" font-size="10" fill="var(--text-secondary)">declined</text><rect x="74" y="64" width="72" height="40" rx="3" fill="var(--seq-6)"/><text x="110.0" y="86.0" text-anchor="middle" font-size="13" fill="var(--surface-1)">7</text><text x="110.0" y="98.0" text-anchor="middle" font-size="8" fill="var(--surface-1)" opacity="0.8">FN</text><rect x="148" y="64" width="72" height="40" rx="3" fill="var(--seq-1)"/><text x="184.0" y="86.0" text-anchor="middle" font-size="13" fill="var(--text-primary)">1</text><text x="184.0" y="98.0" text-anchor="middle" font-size="8" fill="var(--text-primary)" opacity="0.8">TN</text></svg>
+<div class="kv"><span>precision</span><b>100%</b></div>
+<div class="kv"><span>recall</span><b>53%</b></div>
+<div class="kv"><span>F1</span><b>70%</b></div>
+<div class="kv"><span>accuracy</span><b>56%</b></div>
+<div class="kv"><span>balanced acc.</span><b>77%</b></div>
+<div class="kv"><span>specificity</span><b>100%</b></div>
+<div class="kv"><span>MCC</span><b>+0.26</b></div>
+<div class="kv"><span>failures: hedged / confident</span><b>6 / 1</b></div>
+</div>
+</div>
+<p class="note">F1 ignores true negatives, but a correct refusal is a first-class success here — read balanced accuracy and MCC alongside it. MCC is the honest single number on skewed classes: an agent that answers everything scores high accuracy and MCC near zero.</p>
+<h2>Cost</h2>
+<p>Down and to the right is better: cheaper per success, more successes.</p>
+<svg viewBox="0 0 680 300" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="Cost frontier" xmlns="http://www.w3.org/2000/svg" style="max-width:680px"><title>Cost frontier</title><line x1="58" y1="16" x2="58" y2="262" stroke="var(--grid)"/><line x1="58" y1="262" x2="590" y2="262" stroke="var(--grid)"/><text x="324.0" y="294" text-anchor="middle" font-size="10" fill="var(--text-secondary)">USD per success (lower is better)</text><text x="12" y="139.0" font-size="10" fill="var(--text-secondary)" transform="rotate(-90 12 139.0)" text-anchor="middle">success rate</text><line x1="58" y1="262.0" x2="590" y2="262.0" stroke="var(--grid)" stroke-dasharray="2 3"/><text x="52" y="265.0" text-anchor="end" font-size="9" fill="var(--text-muted)">0%</text><line x1="58" y1="139.0" x2="590" y2="139.0" stroke="var(--grid)" stroke-dasharray="2 3"/><text x="52" y="142.0" text-anchor="end" font-size="9" fill="var(--text-muted)">50%</text><line x1="58" y1="16.0" x2="590" y2="16.0" stroke="var(--grid)" stroke-dasharray="2 3"/><text x="52" y="19.0" text-anchor="end" font-size="9" fill="var(--text-muted)">100%</text><circle cx="439.5" cy="77.5" r="6" fill="var(--series-1)" stroke="var(--surface-1)" stroke-width="2"><title>C2: 0.0054 / 75%</title></circle><text x="449.5" y="81.5" font-size="11" fill="var(--text-primary)">C2</text><circle cx="419.8" cy="44.9" r="6" fill="var(--series-1)" stroke="var(--surface-1)" stroke-width="2"><title>D3: 0.0051 / 88%</title></circle><text x="429.8" y="48.9" font-size="11" fill="var(--text-primary)">D3</text><circle cx="590.0" cy="92.9" r="6" fill="var(--series-1)" stroke="var(--surface-1)" stroke-width="2"><title>E1: 0.0075 / 69%</title></circle><text x="600.0" y="96.9" font-size="11" fill="var(--text-primary)">E1</text><circle cx="436.6" cy="123.6" r="6" fill="var(--series-1)" stroke="var(--surface-1)" stroke-width="2"><title>M1: 0.0053 / 56%</title></circle><text x="446.6" y="127.6" font-size="11" fill="var(--text-primary)">M1</text></svg>
+<h3>Token components</h3>
+<div class="legend"><span class="chip"><i style="background:var(--series-1)"></i>static</span><span class="chip"><i style="background:var(--series-2)"></i>per-call overhead</span><span class="chip"><i style="background:var(--series-3)"></i>session setup</span></div>
+<svg viewBox="0 0 680 134" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="Token components per run" xmlns="http://www.w3.org/2000/svg" style="max-width:680px"><title>Token components per run</title><text x="84" y="33.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">C2</text><rect x="92.0" y="19.0" width="540.0" height="18" rx="2" fill="var(--series-1)"><title>static: 804</title></rect><text x="362.0" y="33.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">804</text><text x="84" y="63.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">D3</text><rect x="92.0" y="49.0" width="540.0" height="18" rx="2" fill="var(--series-1)"><title>static: 371</title></rect><text x="362.0" y="63.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">371</text><text x="84" y="93.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">E1</text><rect x="92.0" y="79.0" width="540.0" height="18" rx="2" fill="var(--series-1)"><title>static: 3311</title></rect><text x="362.0" y="93.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">3311</text><text x="84" y="123.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">M1</text><rect x="92.0" y="109.0" width="540.0" height="18" rx="2" fill="var(--series-1)"><title>static: 3311</title></rect><text x="362.0" y="123.0" text-anchor="middle" font-size="10" fill="var(--surface-1)" style="paint-order:stroke;stroke:var(--surface-1);stroke-width:0">3311</text></svg>
+<p class="note">Reported as components and never totalled: stateless MCP moves cost from session setup to a per-call tax that scales with call count, and a total hides that.</p>
+<h2>Mechanism</h2>
+<svg viewBox="0 0 680 170" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="payload efficiency" xmlns="http://www.w3.org/2000/svg" style="max-width:680px"><title>payload efficiency</title><defs><pattern id="hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="var(--band)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--text-muted)" stroke-width="2" opacity="0.5"/></pattern></defs><text x="84" y="35.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">C2</text><rect x="92.0" y="19.0" width="287.8" height="22" rx="4" fill="var(--series-1)"/><text x="385.8" y="35.0" font-size="11" fill="var(--text-primary)">0.02</text><text x="84" y="69.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">D3</text><rect x="92.0" y="53.0" width="514.0" height="22" rx="4" fill="var(--series-1)"/><text x="612.0" y="69.0" font-size="11" fill="var(--text-primary)">0.04</text><text x="84" y="103.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">E1</text><rect x="92.0" y="87.0" width="324.1" height="22" rx="4" fill="var(--series-1)"/><text x="422.1" y="103.0" font-size="11" fill="var(--text-primary)">0.03</text><text x="84" y="137.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">M1</text><rect x="92.0" y="121.0" width="228.1" height="22" rx="4" fill="var(--series-1)"/><text x="326.1" y="137.0" font-size="11" fill="var(--text-primary)">0.02</text></svg>
+<svg viewBox="0 0 680 170" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="peak context tokens" xmlns="http://www.w3.org/2000/svg" style="max-width:680px"><title>peak context tokens</title><defs><pattern id="hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="var(--band)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--text-muted)" stroke-width="2" opacity="0.5"/></pattern></defs><text x="84" y="35.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">C2</text><rect x="92.0" y="19.0" width="221.1" height="22" rx="4" fill="var(--series-1)"/><text x="319.1" y="35.0" font-size="11" fill="var(--text-primary)">6,009</text><text x="84" y="69.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">D3</text><rect x="92.0" y="53.0" width="215.7" height="22" rx="4" fill="var(--series-1)"/><text x="313.7" y="69.0" font-size="11" fill="var(--text-primary)">5,862</text><text x="84" y="103.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">E1</text><rect x="92.0" y="87.0" width="514.0" height="22" rx="4" fill="var(--series-1)"/><text x="612.0" y="103.0" font-size="11" fill="var(--text-primary)">13,967</text><text x="84" y="137.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">M1</text><rect x="92.0" y="121.0" width="488.8" height="22" rx="4" fill="var(--series-1)"/><text x="586.8" y="137.0" font-size="11" fill="var(--text-primary)">13,282</text></svg>
+<svg viewBox="0 0 680 170" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="redundant calls" xmlns="http://www.w3.org/2000/svg" style="max-width:680px"><title>redundant calls</title><defs><pattern id="hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="var(--band)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--text-muted)" stroke-width="2" opacity="0.5"/></pattern></defs><text x="84" y="35.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">C2</text><rect x="92.0" y="19.0" width="1.0" height="22" rx="4" fill="var(--series-1)"/><text x="98.0" y="35.0" font-size="11" fill="var(--text-primary)">0.00</text><text x="84" y="69.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">D3</text><rect x="92.0" y="53.0" width="1.0" height="22" rx="4" fill="var(--series-1)"/><text x="98.0" y="69.0" font-size="11" fill="var(--text-primary)">0.00</text><text x="84" y="103.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">E1</text><rect x="92.0" y="87.0" width="514.0" height="22" rx="4" fill="var(--series-1)"/><text x="612.0" y="103.0" font-size="11" fill="var(--text-primary)">0.71</text><text x="84" y="137.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">M1</text><rect x="92.0" y="121.0" width="42.8" height="22" rx="4" fill="var(--series-1)"/><text x="140.8" y="137.0" font-size="11" fill="var(--text-primary)">0.06</text></svg>
+<svg viewBox="0 0 680 170" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="static context tokens" xmlns="http://www.w3.org/2000/svg" style="max-width:680px"><title>static context tokens</title><defs><pattern id="hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="var(--band)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--text-muted)" stroke-width="2" opacity="0.5"/></pattern></defs><text x="84" y="35.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">C2</text><rect x="92.0" y="19.0" width="124.8" height="22" rx="4" fill="var(--series-1)"/><text x="222.8" y="35.0" font-size="11" fill="var(--text-primary)">804</text><text x="84" y="69.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">D3</text><rect x="92.0" y="53.0" width="57.6" height="22" rx="4" fill="var(--series-1)"/><text x="155.6" y="69.0" font-size="11" fill="var(--text-primary)">371</text><text x="84" y="103.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">E1</text><rect x="92.0" y="87.0" width="514.0" height="22" rx="4" fill="var(--series-1)"/><text x="612.0" y="103.0" font-size="11" fill="var(--text-primary)">3,311</text><text x="84" y="137.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">M1</text><rect x="92.0" y="121.0" width="514.0" height="22" rx="4" fill="var(--series-1)"/><text x="612.0" y="137.0" font-size="11" fill="var(--text-primary)">3,311</text></svg>
+<svg viewBox="0 0 680 170" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="turns" xmlns="http://www.w3.org/2000/svg" style="max-width:680px"><title>turns</title><defs><pattern id="hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="var(--band)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--text-muted)" stroke-width="2" opacity="0.5"/></pattern></defs><text x="84" y="35.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">C2</text><rect x="92.0" y="19.0" width="351.9" height="22" rx="4" fill="var(--series-1)"/><text x="449.9" y="35.0" font-size="11" fill="var(--text-primary)">4.47</text><text x="84" y="69.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">D3</text><rect x="92.0" y="53.0" width="514.0" height="22" rx="4" fill="var(--series-1)"/><text x="612.0" y="69.0" font-size="11" fill="var(--text-primary)">6.53</text><text x="84" y="103.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">E1</text><rect x="92.0" y="87.0" width="393.6" height="22" rx="4" fill="var(--series-1)"/><text x="491.6" y="103.0" font-size="11" fill="var(--text-primary)">5.00</text><text x="84" y="137.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">M1</text><rect x="92.0" y="121.0" width="365.8" height="22" rx="4" fill="var(--series-1)"/><text x="463.8" y="137.0" font-size="11" fill="var(--text-primary)">4.65</text></svg>
+<svg viewBox="0 0 680 170" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="wall clock seconds" xmlns="http://www.w3.org/2000/svg" style="max-width:680px"><title>wall clock seconds</title><defs><pattern id="hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="var(--band)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--text-muted)" stroke-width="2" opacity="0.5"/></pattern></defs><text x="84" y="35.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">C2</text><rect x="92.0" y="19.0" width="343.3" height="22" rx="4" fill="var(--series-1)"/><text x="441.3" y="35.0" font-size="11" fill="var(--text-primary)">26.43</text><text x="84" y="69.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">D3</text><rect x="92.0" y="53.0" width="514.0" height="22" rx="4" fill="var(--series-1)"/><text x="612.0" y="69.0" font-size="11" fill="var(--text-primary)">39.57</text><text x="84" y="103.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">E1</text><rect x="92.0" y="87.0" width="279.4" height="22" rx="4" fill="var(--series-1)"/><text x="377.4" y="103.0" font-size="11" fill="var(--text-primary)">21.51</text><text x="84" y="137.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">M1</text><rect x="92.0" y="121.0" width="217.9" height="22" rx="4" fill="var(--series-1)"/><text x="315.9" y="137.0" font-size="11" fill="var(--text-primary)">16.78</text></svg>
+<svg viewBox="0 0 680 170" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="wasted calls" xmlns="http://www.w3.org/2000/svg" style="max-width:680px"><title>wasted calls</title><defs><pattern id="hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="var(--band)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--text-muted)" stroke-width="2" opacity="0.5"/></pattern></defs><text x="84" y="35.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">C2</text><rect x="92.0" y="19.0" width="45.8" height="22" rx="4" fill="var(--series-1)"/><text x="143.8" y="35.0" font-size="11" fill="var(--text-primary)">0.88</text><text x="84" y="69.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">D3</text><rect x="92.0" y="53.0" width="89.4" height="22" rx="4" fill="var(--series-1)"/><text x="187.4" y="69.0" font-size="11" fill="var(--text-primary)">1.71</text><text x="84" y="103.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">E1</text><rect x="92.0" y="87.0" width="514.0" height="22" rx="4" fill="var(--series-1)"/><text x="612.0" y="103.0" font-size="11" fill="var(--text-primary)">9.81</text><text x="84" y="137.0" text-anchor="end" font-size="11" fill="var(--text-secondary)">M1</text><rect x="92.0" y="121.0" width="497.6" height="22" rx="4" fill="var(--series-1)"/><text x="595.6" y="137.0" font-size="11" fill="var(--text-primary)">9.50</text></svg>
+<p class="note">No variation across any run on: argument_validity = 1, discovery_overhead = 0, forbidden_call_rate = 0, hallucinated_endpoints = 0, turns_to_first_productive_call = 0. Charting these would imply a difference that is not there.</p>
+<p class="note">Every metric above is <b>unvalidated</b>: its relationship to ground truth has not been established on the controlled rig.</p>
+<h2>Details</h2>
+<div class="scroll"><table><tr><th>arm</th><th>n</th><th>success</th><th>95% CI</th><th>lift</th><th>turns</th><th>calls</th><th>static</th><th>trunc</th><th>harm</th><th>$/success</th><th>cached</th></tr><tr><td>C2</td><td>17</td><td>75%</td><td>51%–90%</td><td>n/a</td><td>4.5</td><td>3.5</td><td>804</td><td>6%</td><td>0</td><td>$0.0054</td><td>60%</td></tr><tr><td>D3</td><td>17</td><td>88%</td><td>66%–97%</td><td>n/a</td><td>6.5</td><td>5.5</td><td>371</td><td>0%</td><td>0</td><td>$0.0051</td><td>70%</td></tr><tr><td>E1</td><td>17</td><td>69%</td><td>44%–86%</td><td>n/a</td><td>5.0</td><td>15.0</td><td>3,311</td><td>6%</td><td>1</td><td>$0.0075</td><td>74%</td></tr><tr><td>M1</td><td>17</td><td>56%</td><td>33%–77%</td><td>n/a</td><td>4.6</td><td>13.6</td><td>3,311</td><td>6%</td><td>1</td><td>$0.0053</td><td>86%</td></tr></table></div>
+<h3>Success by class</h3>
+<div class="scroll"><table><tr><th>arm</th><th>R</th><th>RW-fan</th><th>W-irrev</th><th>W-lossy</th><th>W-safe</th></tr><tr><td>C2</td><td>75%</td><td>100%</td><td>67%</td><td>67%</td><td>67%</td></tr><tr><td>D3</td><td>80%</td><td>100%</td><td>67%</td><td>100%</td><td>100%</td></tr><tr><td>E1</td><td>75%</td><td>100%</td><td>67%</td><td>33%</td><td>67%</td></tr><tr><td>M1</td><td>75%</td><td>67%</td><td>33%</td><td>67%</td><td>33%</td></tr></table></div>
+<footer>Controlled result. Programmatic grading only; writes are graded on final server state, never on the transcript.<br>3 runs hit max_turns and are excluded from success rates.<br>Never pool across model, MCP revision, skill condition, or report class.</footer></div></div></body></html>

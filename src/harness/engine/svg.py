@@ -240,6 +240,25 @@ def bar_chart(bars: Sequence[Bar], *, title: str, unit: str = "%",
     return _svg(width, height, "".join(parts), title)
 
 
+#: Ink for a label sitting ON a fill.
+#:
+#: The ordinal ramp runs light-to-dark in BOTH themes — ord-1 is the palest step
+#: whether the page is light or dark. So the ink must be FIXED, not a theme
+#: token: `--text-primary` flips to white in dark mode and would put white
+#: numerals on the palest segment, which is the bug this replaces. Only the
+#: neutral fill genuinely flips with the theme, so it keeps the token.
+_ON_FILL_INK = {
+    "var(--ord-1)": "#0b0b0b", "var(--ord-2)": "#0b0b0b",
+    "var(--ord-3)": "#ffffff", "var(--ord-4)": "#ffffff",
+    "var(--ord-5)": "#ffffff",
+    "var(--neutral)": "var(--text-primary)",
+}
+
+
+def _ink_on(fill: str) -> str:
+    return _ON_FILL_INK.get(fill, "#ffffff")
+
+
 def stacked_bars(labels: Sequence[str], segments: Sequence[str],
                  data: Sequence[Sequence[float]], *, title: str,
                  fills: Sequence[str] | None = None, show_total: bool = True,
@@ -273,12 +292,12 @@ def stacked_bars(labels: Sequence[str], segments: Sequence[str],
                 f"<title>{_e(segments[slot])}: {int(value)}</title></rect>"
             )
             if seg_w > 24:
+                ink = _ink_on(fill)
                 parts.append(
                     f'<text x="{cursor + seg_w / 2 - 1:.1f}" '
                     f'y="{y + row_height / 2 + 4:.1f}" text-anchor="middle" '
-                    f'font-size="10" fill="var(--surface-1)" '
-                    f'style="paint-order:stroke;stroke:var(--surface-1);'
-                    f'stroke-width:0">{int(value)}</text>'
+                    f'font-size="10" font-weight="600" fill="{ink}">'
+                    f"{int(value)}</text>"
                 )
             cursor += seg_w
         if show_total:
@@ -401,7 +420,10 @@ def heatmap(cells: Sequence[tuple[str, str, float, str]], rows: Sequence[str],
         for ci, col in enumerate(cols):
             value, label = lookup.get((row, col), (0, ""))
             step = min(6, int(value / peak * 6)) if peak else 0
-            ink = "var(--surface-1)" if step >= 4 else "var(--text-primary)"
+            # Fixed inks, same reasoning as _ON_FILL_INK: the sequential ramp
+            # is light-to-dark in both themes, so a flipping token is wrong at
+            # one end or the other.
+            ink = "#ffffff" if step >= 4 else "#0b0b0b"
             parts.append(
                 f'<rect x="{pad_l + ci * cell_w}" y="{y}" '
                 f'width="{cell_w - 2}" height="{cell_h - 2}" rx="3" '

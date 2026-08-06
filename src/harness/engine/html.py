@@ -36,11 +36,22 @@ _CSS = """
   p  { margin: 0 0 10px; color: var(--text-secondary); }
   .sub { color: var(--text-muted); font-size: 12px; }
   .note { font-size: 12px; color: var(--text-muted); margin: 6px 0 0; }
-  .banner { border-left: 3px solid var(--status-warning); padding: 10px 14px;
-            background: var(--band); border-radius: 0 6px 6px 0; margin: 6px 0; }
-  .banner.stop { border-left-color: var(--status-critical); }
-  .banner.ok { border-left-color: var(--status-good); }
-  .banner b { color: var(--text-primary); }
+  /* Each severity gets its own tinted surface, mixed from the status colour
+     into the page surface, so the tint stays legible in both themes instead of
+     a fixed pastel that goes muddy in dark mode. Text stays on text tokens
+     throughout — the tint and the border carry identity, never the letters, so
+     the block reads as one voice rather than two. */
+  .banner { border-left: 3px solid var(--status-warning);
+            background: color-mix(in oklab, var(--status-warning) 10%, var(--surface-1));
+            color: var(--text-secondary);
+            padding: 11px 15px; border-radius: 0 6px 6px 0; margin: 8px 0; }
+  .banner.stop { border-left-color: var(--status-critical);
+                 background: color-mix(in oklab, var(--status-critical) 10%, var(--surface-1)); }
+  .banner.ok { border-left-color: var(--status-good);
+               background: color-mix(in oklab, var(--status-good) 10%, var(--surface-1)); }
+  .banner b { color: var(--text-primary); font-weight: 650; }
+  .banner ul { margin: 8px 0; padding-left: 20px; }
+  .banner code { color: var(--text-primary); font-size: 12px; }
   .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 4px;
             font-size: 11px; color: var(--text-secondary); }
   .chip { display: inline-flex; align-items: center; gap: 5px; }
