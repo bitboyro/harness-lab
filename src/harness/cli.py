@@ -256,6 +256,120 @@ def cmd_rig(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_run(args: argparse.Namespace) -> int:
+    """Run the controlled rig across arms and persist everything."""
+    from .engine.compute import compute
+    from .engine.pricing import lookup, price_run
+    from .engine.reporting import render
+    from .engine.results import ResultStore, build_row
+    from .engine.taskpack import TaskPack
+    from .experiment.domain import WorldShape, build_world, shape_for_cores
+    from .experiment.rig import run_one
+    from .experiment.tasks import build_pack
+
+    presets = tuple(args.presets or ("Z0", "A1", "A2", "C1", "D1"))
+    shape = shape_for_cores(args.cores, WorldShape(episodes_per_season=args.fan_out))
+    pack = TaskPack.parse(build_pack(build_world(args.seed, shape),
+                                     cores=args.cores, seed=args.seed))
+
+    tasks = list(pack.tasks)
+    if args.classes:
+        tasks = [t for t in tasks if str(t.task_class) in args.classes]
+    if args.max_tasks:
+        tasks = tasks[:args.max_tasks]
+
+    store = ResultStore(args.out)
+    done = store.completed() if args.resume else set()
+
+    planned = [
+        (arm, task, repeat)
+        for arm in presets
+        for task in tasks
+        for repeat in range(args.repeats)
+        if (arm, task.id, repeat) not in done
+    ]
+    if done:
+        print(f"resuming: {len(done)} runs already on disk, {len(planned)} to go")
+
+    from .engine.providers import get as get_provider
+    provider = get_provider(args.provider)
+    pricing = lookup(args.model)
+    rough = len(planned) * price_run(pricing, input_tokens=8_000,
+                                     output_tokens=1_500).total_usd
+    print(f"{len(planned)} runs — {len(presets)} arms x {len(tasks)} tasks "
+          f"x {args.repeats} repeats. Rough projection ${rough:,.2f}")
+    if not args.yes and not _confirm():
+        print("aborted")
+        return 1
+
+    store.write_manifest(
+        id=args.id, model=args.model, provider=args.provider,
+        presets=list(presets), cores=args.cores, repeats=args.repeats,
+        seed=args.seed, surface_size=args.surface_size, fan_out=args.fan_out,
+        reasoning_effort=args.reasoning_effort,
+        report_class=str(pack.pack.report_class), tasks=len(tasks),
+    )
+
+    axes = {**_base_axes(args), "surface_size": args.surface_size}
+    config = ProviderConfig(
+        model=args.model, reasoning_effort=args.reasoning_effort,
+        temperature=args.temperature, max_turns=args.max_turns,
+        caching=args.caching == "on",
+    )
+
+    for index, (arm, task, repeat) in enumerate(planned, 1):
+        try:
+            trace, grade = run_one(
+                arm, preset(arm, **axes), task, provider, config,
+                seed=args.seed, shape=shape, surface_size=args.surface_size,
+            )
+            row = build_row(arm=arm, task=task, repeat=repeat, trace=trace,
+                            grade=grade, metrics=compute(trace),
+                            report_class=str(pack.pack.report_class),
+                            seed=args.seed)
+            # Written immediately: a matrix that dies two thirds through must
+            # leave two thirds of its results on disk, not nothing.
+            store.record(row, trace)
+            status = "truncated" if trace.truncated else str(grade.outcome)
+            print(f"  [{index}/{len(planned)}] {arm:<4} {task.id:<26} "
+                  f"{status:<15} {len(trace.turns)}t")
+        except KeyboardInterrupt:
+            print("\ninterrupted — results so far are on disk; --resume continues")
+            break
+        except Exception as e:  # noqa: BLE001 — one failed run must not end the matrix
+            print(f"  [{index}/{len(planned)}] {arm:<4} {task.id:<26} ERROR "
+                  f"{type(e).__name__}: {str(e)[:50]}")
+
+    print()
+    print(render(list(store.rows()), store.manifest()))
+    print(f"\nresults: {args.out}/results.jsonl   traces: {args.out}/traces/")
+    return 0
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    """Render results written by a previous run. Re-runs nothing."""
+    from .engine.reporting import render
+    from .engine.results import ResultStore
+
+    store = ResultStore(args.results)
+    rows = list(store.rows())
+    if not rows:
+        print(f"no results in {args.results}")
+        return 1
+
+    if args.csv:
+        import csv
+        import sys as _sys
+        flat = [{k: v for k, v in r.items() if k != "metrics"} for r in rows]
+        writer = csv.DictWriter(_sys.stdout, fieldnames=list(flat[0]))
+        writer.writeheader()
+        writer.writerows(flat)
+        return 0
+
+    print(render(rows, store.manifest()))
+    return 0
+
+
 def _confirm() -> bool:
     if not sys.stdin.isatty():
         return False
@@ -303,6 +417,29 @@ def build_parser() -> argparse.ArgumentParser:
                        help="episodes per season; the blast radius on RW-fan tasks")
     rig_p.set_defaults(func=cmd_rig)
 
+    run_p = sub.add_parser("run", help="run the controlled rig; persists everything")
+    run_p.add_argument("--out", default="results", help="results directory")
+    run_p.add_argument("--id", default="phase-0", help="label for this matrix")
+    run_p.add_argument("--presets", nargs="*",
+                       help="arms to run (default: Z0 A1 A2 C1 D1)")
+    run_p.add_argument("--cores", type=int, default=3)
+    run_p.add_argument("--fan-out", type=int, default=8)
+    run_p.add_argument("--classes", nargs="*",
+                       help="limit to task classes, e.g. R W-safe")
+    run_p.add_argument("--max-tasks", type=int, help="cap tasks, for a smoke run")
+    run_p.add_argument("--max-turns", type=int, default=12)
+    run_p.add_argument("--seed", type=int, default=1)
+    run_p.add_argument("--resume", action="store_true",
+                       help="skip runs already in the results directory")
+    run_p.add_argument("--yes", action="store_true", help="skip the spend prompt")
+    run_p.set_defaults(func=cmd_run)
+
+    report_p = sub.add_parser("report", help="render stored results; re-runs nothing")
+    report_p.add_argument("results", nargs="?", default="results")
+    report_p.add_argument("--csv", action="store_true",
+                          help="dump rows as CSV for your own analysis")
+    report_p.set_defaults(func=cmd_report)
+
     plan_p = sub.add_parser("plan", help="cost projection and approval")
     plan_p.add_argument("plan", type=Path)
     plan_p.add_argument("--approve", action="store_true")
@@ -310,7 +447,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="require a pre-registered confirmatory/exploratory split")
     plan_p.set_defaults(func=cmd_plan)
 
-    for sp in (probe_p, plan_p):
+    for sp in (probe_p, plan_p, run_p):
         sp.add_argument("--provider", default="openai")
         sp.add_argument("--model", default="gpt-5-mini")
         sp.add_argument("--reasoning-effort", default="low")
