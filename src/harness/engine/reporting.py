@@ -24,7 +24,7 @@ def _num(v: float | None, width: int = 6) -> str:
 
 
 def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
-           report: Report | None = None) -> str:
+           report: Report | None = None, glossary: bool = False) -> str:
     """The whole report, as text.
 
     Accepts a prebuilt `Report` so the text and HTML renderers cannot drift:
@@ -188,6 +188,11 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
         lines.append(report_status(report))
 
     lines += ["", _footer(report_class, report.truncated_count)]
+    if glossary:
+        from .glossary import render_text
+        lines += ["", render_text()]
+    else:
+        lines.append("  every term is explained by: harness report <dir> --glossary")
     return "\n".join(lines)
 
 

@@ -69,6 +69,20 @@ _CSS = """
   .kv { display: flex; justify-content: space-between; font-size: 11px;
         color: var(--text-secondary); padding: 2px 0; }
   .kv b { color: var(--text-primary); font-weight: 600; }
+  details.howto { border: 1px solid var(--grid); border-radius: 8px;
+                  padding: 10px 14px; margin: 14px 0 4px; }
+  details.howto summary { cursor: pointer; font-weight: 600;
+                          color: var(--text-primary); font-size: 13px; }
+  details.howto p { margin: 10px 0 0; font-size: 13px; }
+  abbr { text-decoration: underline dotted; text-underline-offset: 3px;
+         cursor: help; }
+  dl.glossary { display: grid; grid-template-columns: minmax(120px, 180px) 1fr;
+                gap: 6px 18px; font-size: 12px; margin: 12px 0 0; }
+  dl.glossary dt { font-weight: 600; color: var(--text-primary); }
+  dl.glossary dd { margin: 0; color: var(--text-secondary); }
+  dl.glossary .why { color: var(--text-muted); }
+  @media (max-width: 560px) { dl.glossary { grid-template-columns: 1fr; }
+                              dl.glossary dd { margin-bottom: 8px; } }
   footer { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--grid);
            font-size: 11px; color: var(--text-muted); }
 """
@@ -76,6 +90,20 @@ _CSS = """
 
 def _e(v: Any) -> str:
     return escape(str(v), quote=True)
+
+
+def _th(label: str, term: str | None = None) -> str:
+    """A header cell that explains itself on hover.
+
+    The definition rides on the column rather than living only in a glossary at
+    the bottom: a reader meets `MCC` in the table, and that is where the
+    question occurs to them."""
+    from .glossary import lookup
+    entry = lookup(term or label)
+    if not entry:
+        return f"<th>{_e(label)}</th>"
+    tip = entry.long or entry.short
+    return (f'<th><abbr title="{_e(entry.short)} {_e(tip)}">{_e(label)}</abbr></th>')
 
 
 def _pct(v: float | None, digits: int = 0) -> str:
@@ -218,6 +246,25 @@ def render_html(report: Report) -> str:
                 f"access to the API at all. Every number below is lift over "
                 f"this.</div>"
             )
+
+    # ---- how to read this ------------------------------------------------
+    out.append(
+        '<details class="howto"><summary>How to read this report</summary>'
+        "<p><b>Every arm answers the same tasks against the same API.</b> The "
+        "only thing that changes is how the API is presented to the model. "
+        "Higher is better everywhere except harm, truncation and false "
+        "positives.</p>"
+        "<p><b>Start with lift, not success.</b> <i>Z0</i> is the control that "
+        "gets no tools at all — it shows what the model already knew. An arm "
+        "scoring 67% looks fine until Z0 scored 83%, at which point the tools "
+        "made things worse. Lift is success minus Z0, measured in "
+        "<i>percentage points</i> (pp).</p>"
+        "<p><b>Then check the interval, not the gap.</b> Every difference has a "
+        "95% CI. If it spans zero, this run cannot tell the difference from "
+        "nothing — however large the bar looks.</p>"
+        "<p>Hover any column heading for its definition, or read the full "
+        "glossary at the bottom.</p></details>"
+    )
 
     # ---- what the arms are ----------------------------------------------
     described = [(n, report.arms[n].description) for n in sorted(report.arms)
@@ -384,6 +431,17 @@ def render_html(report: Report) -> str:
         out.append("<h3>Harness errors</h3>")
         out.append(_error_table(report))
 
+    # ---- glossary --------------------------------------------------------
+    from .glossary import GLOSSARY
+    out.append("<h2>Glossary</h2>")
+    entries = "".join(
+        f"<dt>{_e(t.name)}</dt><dd>{_e(t.short)}"
+        + (f" <span class=\"why\">{_e(t.long)}</span>" if t.long else "")
+        + "</dd>"
+        for t in GLOSSARY
+    )
+    out.append(f"<dl class='glossary'>{entries}</dl>")
+
     out.append(_footer(report))
 
     body = "\n".join(out)
@@ -447,9 +505,10 @@ def _banners(report: Report) -> str:
 
 def _arm_table(report: Report) -> str:
     pricing = report.pricing
-    head = ("<tr><th>arm</th><th>n</th><th>success</th><th>95% CI</th>"
-            "<th>lift</th><th>turns</th><th>calls</th><th>static</th>"
-            "<th>trunc</th><th>harm</th><th>$/success</th><th>cached</th></tr>")
+    head = ("<tr>" + _th("arm") + "<th>n</th>" + _th("success", "success rate")
+            + _th("95% CI") + _th("lift") + _th("turns") + _th("calls")
+            + _th("static", "static tokens") + _th("trunc", "truncated")
+            + _th("harm") + _th("$/success") + _th("cached") + "</tr>")
     rows = []
     for name in sorted(report.arms):
         a = report.arms[name]
@@ -475,9 +534,12 @@ def _arm_table(report: Report) -> str:
 
 
 def _confusion_table(report: Report) -> str:
-    head = ("<tr><th>arm</th><th>precision</th><th>recall</th><th>F1</th>"
-            "<th>accuracy</th><th>balanced</th><th>specificity</th><th>MCC</th>"
-            "<th>TP</th><th>FP</th><th>TN</th><th>FN</th></tr>")
+    head = ("<tr>" + _th("arm") + _th("precision") + _th("recall") + _th("F1")
+            + _th("accuracy") + _th("balanced", "balanced accuracy")
+            + _th("specificity") + _th("MCC")
+            + _th("TP", "TP / true positive") + _th("FP", "FP / false positive")
+            + _th("TN", "TN / true negative") + _th("FN", "FN / false negative")
+            + "</tr>")
     rows = []
     for name in sorted(report.arms):
         c = report.arms[name].confusion
@@ -499,9 +561,9 @@ def _confusion_table(report: Report) -> str:
 
 
 def _effort_table(report: Report) -> str:
-    head = ("<tr><th>arm</th><th>total tokens</th><th>input</th><th>cached</th>"
-            "<th>output</th><th>reasoning</th><th>seconds</th><th>turns</th>"
-            "<th>calls</th></tr>")
+    head = ("<tr>" + _th("arm") + "<th>total tokens</th><th>input</th>"
+            + _th("cached") + "<th>output</th><th>reasoning</th>"
+            + "<th>seconds</th>" + _th("turns") + _th("calls") + "</tr>")
     rows = []
     for name in sorted(report.arms):
         a = report.arms[name]

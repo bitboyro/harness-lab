@@ -515,7 +515,8 @@ def cmd_report(args: argparse.Namespace) -> int:
         writer.writerows(flat)
         return 0
 
-    print(render(rows, store.manifest(), report=report))
+    print(render(rows, store.manifest(), report=report,
+                 glossary=args.glossary))
     from .engine.stats import analyse as analyse_stats
     stats = analyse_stats(report)
     if stats.contrasts:
@@ -629,6 +630,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     report_p = sub.add_parser("report", help="render stored results; re-runs nothing")
     report_p.add_argument("results", nargs="?", default="results")
+    report_p.add_argument("--glossary", action="store_true",
+                          help="explain every term in the report")
     report_p.add_argument("--csv", action="store_true",
                           help="dump rows as CSV for your own analysis")
     report_p.add_argument("--html", metavar="PATH",
