@@ -321,8 +321,12 @@ def cmd_run(args: argparse.Namespace) -> int:
         id=args.id, model=args.model, provider=args.provider,
         presets=list(presets), cores=args.cores, repeats=args.repeats,
         seed=args.seed, surface_size=args.surface_size, fan_out=args.fan_out,
-        reasoning_effort=args.reasoning_effort,
+        reasoning_effort=args.reasoning_effort, difficulty=args.difficulty,
         report_class=str(pack.pack.report_class), tasks=len(tasks),
+        # The real count, not arms x tasks x repeats: some cells are skipped
+        # deliberately (Z1 cannot do writes), and an inferred total makes the
+        # ETA wrong for the whole run.
+        planned=len(planned) + len(done), resumed=len(done),
     )
 
     axes = {**_base_axes(args), "surface_size": args.surface_size}
@@ -331,6 +335,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         temperature=args.temperature, max_turns=args.max_turns,
         caching=args.caching == "on",
     )
+
+    import time as _time
+    started_at = _time.time()
 
     for index, (label, arm, overrides, task, repeat) in enumerate(planned, 1):
         try:
@@ -347,14 +354,19 @@ def cmd_run(args: argparse.Namespace) -> int:
             # leave two thirds of its results on disk, not nothing.
             store.record(row, trace)
             status = "truncated" if trace.truncated else str(grade.outcome)
-            print(f"  [{index}/{len(planned)}] {label:<14} {task.id:<26} "
-                  f"{status:<15} {len(trace.turns)}t")
+            print(f"  {_progress(index, len(planned), started_at)} "
+                  f"{label:<12} {task.id:<26} {status:<15} {len(trace.turns)}t",
+                  # Unbuffered: redirected to a file, Python buffers stdout and
+                  # the log silently lags minutes behind the actual run — which
+                  # is exactly when you most want to see progress.
+                  flush=True)
         except KeyboardInterrupt:
             print("\ninterrupted — results so far are on disk; --resume continues")
             break
         except Exception as e:  # noqa: BLE001 — one failed run must not end the matrix
-            print(f"  [{index}/{len(planned)}] {label:<14} {task.id:<26} ERROR "
-                  f"{type(e).__name__}: {str(e)[:50]}")
+            print(f"  {_progress(index, len(planned), started_at)} "
+                  f"{label:<12} {task.id:<26} ERROR "
+                  f"{type(e).__name__}: {str(e)[:50]}", flush=True)
 
     print()
     final = _build_report(store)
@@ -386,6 +398,18 @@ def _build_report(store, *, mde_pp: float | None = None):
         except Exception:  # noqa: BLE001 — a missing MDE only drops one banner
             mde_pp = None
     return Report(rows=list(store.rows()), manifest=manifest, mde_pp=mde_pp)
+
+
+def cmd_progress(args: argparse.Namespace) -> int:
+    """Check a run in flight, from a second terminal, without disturbing it."""
+    from .engine.progress import read
+
+    progress = read(args.results)
+    if not progress.done:
+        print(f"no runs recorded yet in {args.results}")
+        return 1
+    print(progress.render())
+    return 0
 
 
 def cmd_report(args: argparse.Namespace) -> int:
@@ -433,6 +457,26 @@ def cmd_report(args: argparse.Namespace) -> int:
         print("\n  contrasts:")
         print(stats.render())
     return 0
+
+
+def _progress(done: int, total: int, started_at: float) -> str:
+    """`[ 42/270  16%  eta 21m]` — position, share, and time remaining.
+
+    ETA from observed pace rather than a fixed estimate, because run duration
+    varies several-fold by arm: a shell arm shelling out to curl is nothing like
+    a single tool call.
+    """
+    import time
+    elapsed = time.time() - started_at
+    rate = elapsed / done if done else 0.0
+    remaining = rate * (total - done)
+    if remaining >= 3600:
+        eta = f"{remaining / 3600:.1f}h"
+    elif remaining >= 60:
+        eta = f"{remaining / 60:.0f}m"
+    else:
+        eta = f"{remaining:.0f}s"
+    return f"[{done:>4}/{total}  {done * 100 // total:>3}%  eta {eta:>4}]"
 
 
 def _confirm() -> bool:
@@ -507,6 +551,10 @@ def build_parser() -> argparse.ArgumentParser:
                        help="skip runs already in the results directory")
     run_p.add_argument("--yes", action="store_true", help="skip the spend prompt")
     run_p.set_defaults(func=cmd_run)
+
+    progress_p = sub.add_parser("progress", help="how far along is a run")
+    progress_p.add_argument("results", nargs="?", default="results")
+    progress_p.set_defaults(func=cmd_progress)
 
     report_p = sub.add_parser("report", help="render stored results; re-runs nothing")
     report_p.add_argument("results", nargs="?", default="results")
