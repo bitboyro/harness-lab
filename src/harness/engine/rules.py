@@ -71,11 +71,18 @@ def _name_collisions(spec: ApiSpec) -> Iterable[Finding]:
 
 
 def _unbounded_collections(spec: ApiSpec) -> Iterable[Finding]:
-    paged = {"page", "per_page", "limit", "offset", "cursor", "page_size"}
+    paged = {"page", "per_page", "limit", "offset", "cursor", "page_size",
+             "topk", "top_k", "max_results", "count"}
     for op in spec.operations:
-        if op.method != "get" or "{" in op.path.rsplit("/", 1)[-1]:
+        # On MCP everything is a POST, so the HTTP verb cannot identify a
+        # collection. Fall back to the name, which is what an agent reads too.
+        looks_like_list = (op.operation_id.startswith(("list_", "search_"))
+                           if spec.source == "mcp"
+                           else op.method == "get"
+                           and "{" not in op.path.rsplit("/", 1)[-1])
+        if not looks_like_list:
             continue
-        names = {p.get("name") for p in op.parameters}
+        names = {str(p.get("name", "")).lower() for p in op.parameters}
         if not (names & paged):
             yield _f("unbounded-collection", Severity.HIGH,
                      f"{op.operation_id} returns a collection with no pagination "
@@ -85,6 +92,11 @@ def _unbounded_collections(spec: ApiSpec) -> Iterable[Finding]:
 
 
 def _untyped_errors(spec: ApiSpec) -> Iterable[Finding]:
+    if spec.source == "mcp":
+        # MCP has no equivalent of an OpenAPI responses block, so this would
+        # fire on every tool of every server — 24 identical findings that no
+        # owner can act on, drowning the ones they can.
+        return
     for op in spec.operations:
         codes = [c for c in op.responses if c.startswith(("4", "5"))]
         if not codes:
@@ -121,6 +133,8 @@ def _ambiguous_mutation_routes(spec: ApiSpec) -> Iterable[Finding]:
     unspecified fields, an action endpoint may be irreversible, and nothing in
     the schema says which one the caller meant.
     """
+    if spec.source == "mcp":
+        return  # no HTTP verbs to be ambiguous between
     by_resource: dict[str, list[Operation]] = {}
     for op in spec.operations:
         if not op.is_mutation:
@@ -146,6 +160,8 @@ def _ambiguous_mutation_routes(spec: ApiSpec) -> Iterable[Finding]:
 
 
 def _no_idempotency(spec: ApiSpec) -> Iterable[Finding]:
+    if spec.source == "mcp":
+        return  # every MCP tool is a POST; the rule would fire on all of them
     for op in spec.operations:
         if op.method != "post":
             continue

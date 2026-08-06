@@ -96,7 +96,12 @@ class McpClient:
         })
         self.cost.session_setup_tokens += self._count(json.dumps(body))
         response = self.transport.send(body, {"Content-Type": "application/json"})
-        self._session_id = response.get("_sessionId") or response.get("sessionId")
+        # The header is where a real server puts it; the body fields were a
+        # guess and no server actually returns them.
+        headers = getattr(self.transport, "last_headers", {}) or {}
+        self._session_id = (headers.get("mcp-session-id")
+                            or response.get("_sessionId")
+                            or response.get("sessionId"))
 
         notice = self._envelope("notifications/initialized", {})
         self.cost.session_setup_tokens += self._count(json.dumps(notice))
@@ -181,13 +186,17 @@ class McpClient:
         return response.get("result", {})
 
     def _envelope(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
-        self._next_id += 1
         body: dict[str, Any] = {
             "jsonrpc": "2.0",
-            "id": self._next_id,
             "method": method,
             "params": dict(params),
         }
+        # Notifications carry no id, by the JSON-RPC spec. Giving one an id
+        # makes the server treat it as a request and hold the stream open for a
+        # reply the client is not going to read.
+        if not method.startswith("notifications/"):
+            self._next_id += 1
+            body["id"] = self._next_id
         if self.revision is McpRevision.R2026_07_28 and method != "initialize":
             body["params"]["_meta"] = {
                 "protocolVersion": PROTOCOL_VERSION[self.revision],

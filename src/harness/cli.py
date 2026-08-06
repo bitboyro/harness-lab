@@ -108,12 +108,28 @@ def _mcp_executor_factory(pack, revision):
     return make
 
 
+def _build_method(name: str, make_executor, spec):
+    """A packaging method wired to the live target."""
+    from .engine.dispatch import MetaToolDispatcher
+
+    cls = _METHODS.get(name, EagerAllMcp)
+    if cls is NoTools:
+        return cls()
+    if cls is MetaToolsMcp:
+        # The triad dispatches onto the same executor eager-all uses, so the
+        # arms differ in discovery and nothing else.
+        return cls(make_executor=lambda materials, _v=None:
+                   MetaToolDispatcher(spec, make_executor(materials, None)))
+    if cls in (CodeFsMcp, DocsShell):
+        return cls()
+    return cls(make_executor=make_executor)
+
+
 def cmd_probe(args: argparse.Namespace) -> int:
     from .engine.axes import McpRevision
     from .engine.field import run_pack
     from .engine.methods import register_defaults
 
-    spec = load_spec(args.spec)
     base_url = os.environ.get("TARGET_BASE_URL")
     pack = load_pack(args.pack, base_url=base_url,
                      allow_production_writes=args.i_know_this_is_production)
@@ -128,6 +144,32 @@ def cmd_probe(args: argparse.Namespace) -> int:
         from .engine.mcp.transport import probe_server
         revision = detect_revision(probe_server(pack.api.mcp.url))
         print(f"detected MCP revision: {revision.value}")
+
+    # The surface. For a live MCP target it comes from the server's own
+    # tools/list — requiring a hand-written OpenAPI alongside would guarantee
+    # the two drift, and the server is the thing under test.
+    if args.spec:
+        spec = load_spec(args.spec)
+    elif pack.api.mcp:
+        from .engine.generate import spec_from_tools
+        from .engine.mcp import McpClient
+        from .engine.mcp.transport import HttpTransport
+        probe_client = McpClient(
+            HttpTransport.from_env(pack.api.mcp.url,
+                                   auth_type=pack.api.auth.type,
+                                   auth_env=pack.api.auth.env,
+                                   header_name=pack.api.auth.header_name),
+            revision)
+        probe_client.connect()
+        listed = probe_client.list_tools()
+        spec = spec_from_tools(listed.tools, title=pack.pack.id)
+        print(f"derived surface from tools/list: {len(spec.operations)} tools")
+    elif pack.api.openapi:
+        spec = load_spec(pack.api.openapi)
+    else:
+        print("no --spec, no api.mcp, and no api.openapi — nothing to describe "
+              "the surface with")
+        return 1
 
     axes = {**_base_axes(args), "mcp_revision": revision}
     presets = tuple(args.presets or DEFAULT_PROBE_PRESETS)
@@ -145,7 +187,7 @@ def cmd_probe(args: argparse.Namespace) -> int:
         print("aborted")
         return 1
 
-    register_defaults(_mcp_executor_factory(pack, revision) or (lambda m, v: None))
+    make_executor = _mcp_executor_factory(pack, revision)
     config = ProviderConfig(
         model=args.model, reasoning_effort=args.reasoning_effort,
         temperature=args.temperature, max_turns=args.max_turns,
@@ -160,7 +202,10 @@ def cmd_probe(args: argparse.Namespace) -> int:
         pack, spec, provider, config,
         presets=presets,
         base_axes=axes,
-        method_for=lambda name: _METHODS.get(name, EagerAllMcp)(),
+        # Built WITH the transport factory. Registering it globally was not
+        # enough: method_for was constructing fresh instances that had no way
+        # to reach the server.
+        method_for=lambda name: _build_method(name, make_executor, spec),
         repeats=args.repeats,
         trace_dir=args.trace_dir,
         on_run=progress,
@@ -497,7 +542,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     probe_p = sub.add_parser("probe", help="T2: a few runs, gold-free metrics")
     probe_p.add_argument("pack", type=Path)
-    probe_p.add_argument("--spec", type=Path, required=True)
+    probe_p.add_argument("--spec", type=Path,
+                         help="OpenAPI document. Optional for a live MCP "
+                              "target, where tools/list is the surface")
     probe_p.add_argument("--presets", nargs="*")
     probe_p.add_argument("--trace-dir", default="traces")
     probe_p.add_argument("--max-turns", type=int, default=12)

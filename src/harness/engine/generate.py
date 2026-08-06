@@ -51,6 +51,10 @@ class ApiSpec:
     version: str
     operations: tuple[Operation, ...]
     raw: dict[str, Any]
+    #: "openapi" or "mcp". Some lint rules describe HTTP conventions that an
+    #: MCP surface has no way to express — firing them on every tool would bury
+    #: the real findings under noise the owner cannot act on.
+    source: str = "openapi"
 
     def limited_to(self, surface_size: int) -> ApiSpec:
         """Expose the first N operations.
@@ -60,7 +64,8 @@ class ApiSpec:
         """
         if surface_size <= 0 or surface_size >= len(self.operations):
             return self
-        return ApiSpec(self.title, self.version, self.operations[:surface_size], self.raw)
+        return ApiSpec(self.title, self.version, self.operations[:surface_size],
+                       self.raw, self.source)
 
     def by_id(self, operation_id: str) -> Operation | None:
         return next((o for o in self.operations if o.operation_id == operation_id), None)
@@ -75,6 +80,44 @@ class ApiSpec:
             if re.fullmatch(pattern, path.split("?")[0]):
                 return True
         return False
+
+
+def spec_from_tools(tools, *, title: str = "Live MCP", version: str = "live") -> ApiSpec:
+    """Build an ApiSpec from a live server's ``tools/list``.
+
+    Field mode against a real MCP server has no OpenAPI document, and demanding
+    one would mean hand-writing a spec that then drifts from the server. The
+    server's own tool list *is* the surface, so it is the source of truth here —
+    the same role the OpenAPI file plays for a generated target (L2).
+
+    The mapping is deliberately thin: an MCP tool has a name, a description and
+    an input schema, and that is exactly what an operation needs. Paths are
+    synthetic (`/<tool>`) because MCP has no paths, and nothing downstream uses
+    them for a tool-call arm.
+    """
+    operations = []
+    for tool in tools:
+        schema = tool.parameters or {}
+        properties = schema.get("properties") or {}
+        required = set(schema.get("required") or [])
+        operations.append(Operation(
+            operation_id=tool.name,
+            method="post",
+            path=f"/{tool.name}",
+            summary=(tool.description or "").split("\n")[0][:200],
+            description=tool.description or "",
+            parameters=tuple(
+                {"name": name, "in": "query", "required": name in required,
+                 "schema": body if isinstance(body, dict) else {"type": "string"},
+                 "description": (body or {}).get("description", "")
+                 if isinstance(body, dict) else ""}
+                for name, body in properties.items()
+            ),
+            request_body=None,
+            responses={"200": {"description": "ok"}},
+        ))
+    return ApiSpec(title=title, version=version,
+                   operations=tuple(operations), raw={}, source="mcp")
 
 
 def load_spec(source: str | Path | dict[str, Any]) -> ApiSpec:

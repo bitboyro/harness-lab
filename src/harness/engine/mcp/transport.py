@@ -18,6 +18,11 @@ from typing import Any, Callable
 
 DEFAULT_TIMEOUT_S = 60.0
 
+#: Identify ourselves. Without a User-Agent, bot protection in front of a real
+#: server rejects the request before MCP is ever reached — a 403 that looks like
+#: an auth failure and is not one.
+USER_AGENT = "harness-lab/0.1 (+https://github.com/bitboy-ro/harness-lab)"
+
 
 class TransportError(RuntimeError):
     pass
@@ -34,6 +39,10 @@ class HttpTransport:
     url: str
     headers: dict[str, str] = field(default_factory=dict)
     timeout_s: float = DEFAULT_TIMEOUT_S
+    #: Response headers from the last exchange. The legacy revision returns the
+    #: session id in `Mcp-Session-Id`, not in the JSON body, so the client
+    #: cannot find it without this.
+    last_headers: dict[str, str] = field(default_factory=dict)
     #: Every request/response pair, for the trace. Server-side request logs are
     #: not available in field mode, so this is the only record of what was sent.
     log: list[tuple[dict, dict, dict]] = field(default_factory=list)
@@ -62,6 +71,10 @@ class HttpTransport:
         return cls(url=url, headers=headers, **kw)
 
     def send(self, body: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+        # A JSON-RPC *notification* has no `id` and gets no reply. Waiting for
+        # one hangs until the socket times out, because the server keeps the
+        # stream open for events that never come.
+        notification = "id" not in body
         payload = json.dumps(body).encode()
         request = urllib.request.Request(
             self.url,
@@ -69,18 +82,31 @@ class HttpTransport:
             method="POST",
             headers={
                 "Accept": "application/json, text/event-stream",
+                "User-Agent": USER_AGENT,
                 **self.headers,
                 **headers,
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_s) as response:
+            timeout = 5.0 if notification else self.timeout_s
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                self.last_headers = {k.lower(): v for k, v in response.headers.items()}
+                if notification:
+                    self.log.append((body, headers, {}))
+                    return {}
                 raw = response.read().decode()
                 content_type = response.headers.get("Content-Type", "")
         except urllib.error.HTTPError as e:
             detail = e.read().decode()[:500]
             raise TransportError(f"{e.code} from {self.url}: {detail}") from e
+        except TimeoutError:
+            if notification:
+                # Accepted, just never answered. Not an error.
+                return {}
+            raise TransportError(f"timed out after {self.timeout_s}s: {self.url}")
         except urllib.error.URLError as e:
+            if notification and isinstance(getattr(e, "reason", None), TimeoutError):
+                return {}
             raise TransportError(f"cannot reach {self.url}: {e.reason}") from e
 
         parsed = _parse_sse(raw) if "text/event-stream" in content_type else _parse_json(raw)
@@ -133,18 +159,23 @@ class InProcessTransport:
 def probe_server(url: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
     """Ask a server what it is, to resolve ``spec_revision: auto``.
 
-    Tries the stateless shape first. A server that still wants a handshake will
-    reject it, which is itself the signal that it is on the legacy revision.
+    Asks via ``initialize`` and believes what the server reports, rather than
+    inferring from whether a stateless request fails. Inference was wrong in
+    both directions: a stateless request can fail for reasons that have nothing
+    to do with the revision (bot protection, a bad path), and a lenient server
+    can accept one while still being legacy.
     """
     transport = HttpTransport(url=url, headers=headers or {})
-    body = {
-        "jsonrpc": "2.0",
-        "id": 0,
-        "method": "tools/list",
-        "params": {"_meta": {"protocolVersion": "2026-07-28"}},
-    }
     try:
-        transport.send(body, {"Mcp-Method": "tools/list"})
-        return {"protocolVersion": "2026-07-28"}
+        response = transport.send({
+            "jsonrpc": "2.0", "id": 0, "method": "initialize",
+            "params": {"protocolVersion": "2025-06-18",
+                       "clientInfo": {"name": "harness-lab", "version": "0"},
+                       "capabilities": {}},
+        }, {})
+        reported = (response.get("result") or {}).get("protocolVersion")
+        if reported:
+            return {"protocolVersion": reported}
     except TransportError:
-        return {"protocolVersion": "2025-06-18"}
+        pass
+    return {"protocolVersion": "2025-06-18"}
