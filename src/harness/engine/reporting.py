@@ -48,6 +48,17 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
                  f"{len({r['task_id'] for r in rows})} tasks")
     lines.append("")
 
+    # --- what each arm is -------------------------------------------------
+    # Printed before the numbers: a table of arm codes means nothing to a reader
+    # who does not already know the design, and the codes are the least
+    # informative thing on the page.
+    described = [(n, a.description) for n, a in sorted(arms.items()) if a.description]
+    if described:
+        lines += ["  the arms — what was actually compared:"]
+        for name, text in described:
+            lines.append(f"    {name:<9} {text}")
+        lines.append("")
+
     # --- refuse to pool ---------------------------------------------------
     # Arms with no MCP transport at all (Z0, the shell arms) carry a null
     # revision. That is an absence, not a different revision, and treating it
@@ -82,16 +93,6 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
     else:
         lines.append(f"Parametric baseline (Z0): {baseline:.0%}")
     lines.append("")
-
-    # --- what each arm is -------------------------------------------------
-    # Printed before the numbers: a table of arm codes means nothing to a reader
-    # who does not already know the design, and the codes are the least
-    # informative thing on the page.
-    described = [(n, a.description) for n, a in sorted(arms.items()) if a.description]
-    if described:
-        lines += ["", "  the arms:"]
-        for name, text in described:
-            lines.append(f"    {name:<9} {text}")
 
     # --- main table -------------------------------------------------------
     header = (f"  {'arm':<8} {'success':>7} {'lift':>6} {'turns':>6} {'calls':>6} "

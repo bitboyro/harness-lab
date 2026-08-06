@@ -282,6 +282,7 @@ def render_html(report: Report) -> str:
         )
         out.append(f'<div class="scroll"><table>{rows}</table></div>')
 
+
     # ---- charts ----------------------------------------------------------
     if "lift" in charts:
         out.append("<h2>Lift over baseline</h2>")

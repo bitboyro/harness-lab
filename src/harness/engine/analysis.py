@@ -32,6 +32,24 @@ OUTCOME_ORDER = ("pass", "correct-refusal", "fail-hedged", "fail-confident",
                  "false-positive", "truncated")
 
 
+def _describe_preset(arm: str) -> str:
+    """Best-effort description from a preset name alone (legacy ledgers)."""
+    from .axes import (Caching, DocBudget, ErrorDetail, McpRevision,
+                       ResponseShape, SchemaDetail, describe, preset)
+    base = arm.split("@")[0]
+    try:
+        return describe(preset(base,
+                               schema_detail=SchemaDetail.STANDARD,
+                               response_shape=ResponseShape.AS_IS,
+                               error_detail=ErrorDetail.FIELD_SCOPED,
+                               doc_budget=DocBudget.STANDARD, surface_size=0,
+                               model="?", reasoning_effort="?", temperature=0.0,
+                               caching=Caching.OFF, repeats=1,
+                               mcp_revision=McpRevision.R2026_07_28))
+    except Exception:  # noqa: BLE001 — an unknown arm just has no description
+        return ""
+
+
 def wilson(successes: int, n: int, z: float = 1.96) -> tuple[float, float] | None:
     """Wilson score interval.
 
@@ -179,11 +197,18 @@ class ArmSummary:
 
     @property
     def description(self) -> str:
-        """What this arm actually was, from the row rather than its name."""
+        """What this arm actually was.
+
+        Prefers the assignment recorded on the row, which is exact even when a
+        sweep overrode an axis. Falls back to the preset name for ledgers
+        written before that field existed — without the fallback the section
+        silently disappears on older results, which is worse than an
+        approximate description.
+        """
         for row in self.rows:
             if row.get("axes", {}).get("description"):
                 return str(row["axes"]["description"])
-        return ""
+        return _describe_preset(self.arm)
 
     @property
     def confusion(self) -> Confusion:
