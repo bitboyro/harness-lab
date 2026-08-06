@@ -336,6 +336,39 @@ def render_html(report: Report) -> str:
                "relationship to ground truth has not been established on the "
                "controlled rig.</p>")
 
+    # ---- contrasts -------------------------------------------------------
+    from .stats import analyse as analyse_stats
+    stats = analyse_stats(report)
+    if stats.contrasts:
+        out.append("<h2>Contrasts</h2>")
+        out.append(
+            "<p>Paired within core, so per-core difficulty cancels. Only "
+            "pre-registered contrasts can reach significance; exploratory ones "
+            "are shown and labelled but never corrected.</p>"
+        )
+        head = ("<tr><th>contrast</th><th>difference</th><th>95% CI</th>"
+                "<th>p</th><th>cores</th><th>kind</th><th>hypothesis</th></tr>")
+        rows = []
+        for c in stats.contrasts:
+            p_value = c.p_adjusted if c.p_adjusted is not None else c.p_raw
+            mark = " *" if c.significant else ""
+            rows.append(
+                f"<tr><td>{_e(c.arm_a)} vs {_e(c.arm_b)}</td>"
+                f"<td>{c.diff:+.1%}{mark}</td>"
+                f"<td>{c.ci[0]:+.1%} … {c.ci[1]:+.1%}</td>"
+                f"<td>{p_value:.4f}</td><td>{c.n_cores}</td>"
+                f"<td>{'confirmatory' if c.confirmatory else 'exploratory'}</td>"
+                f"<td>{_e(c.hypothesis or '')}</td></tr>"
+            )
+        out.append(f'<div class="scroll"><table>{head}{"".join(rows)}</table></div>')
+        if not stats.findings:
+            out.append(
+                '<div class="banner"><b>Nothing survives correction.</b> At this '
+                "sample size that means <i>not detectable</i>, not <i>no "
+                "difference</i> — read the confidence intervals, not the "
+                "p-values.</div>"
+            )
+
     # ---- tables ----------------------------------------------------------
     out.append("<h2>Details</h2>")
     out.append("<h3>Answer or abstain</h3>")

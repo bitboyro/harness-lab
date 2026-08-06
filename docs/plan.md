@@ -225,12 +225,12 @@ Specified in the same commit as the rig, before any matrix run: mixed-effects lo
 
 | Phase | Deliverable |
 |---|---|
-| **P0** | Repo skeleton; **task-pack schema frozen**; **`PackagingMethod` plugin interface**; orthogonal axes + matrix selection layer; provider interface; cost estimator; `rule → justifying run` traceability (empty) |
-| **P1** | Engine: agent loop, OpenAI adapter, executors for `tool-call` / `shell` / `code`, discovery modes `eager-all` / `meta-tools` / `code-fs`, dual-revision MCP client, tracing, gold-free metrics (all tagged `unvalidated`) |
-| **P1.5** | **T1 static lint + agent-readiness scorecard** — first shippable artifact, $0 to run |
-| **P2** | **Field mode + T2 probe**, read-only default, Z0/Z1 parametric baseline, first real target |
-| **P3** | Controlled rig: fictional media-catalog API, seeder, task/answer-key generator, grader, **Z0 gate**, statistical plan; rig validation (~90 runs) |
-| **P4** | Controlled matrix + error/response affordance sweep + dual skill conditions; flip metric validation flags; back-fill lint-rule justifications |
+| ~~P0~~ ✅ | Repo skeleton; task-pack schema frozen; `PackagingMethod` plugin interface; orthogonal axes + matrix selection layer; provider interface; cost estimator; rule → justifying-run traceability |
+| ~~P1~~ ✅ | Engine: agent loop, OpenAI adapter, executors for `tool-call` / `shell` / `code`, discovery modes, dual-revision MCP client, tracing, gold-free metrics (all tagged `unvalidated`) |
+| ~~P1.5~~ ✅ | T1 static lint + scorecard, MCP-aware. **0 of 8 rules justified** — only a sweep can earn one |
+| ~~P2~~ ✅ | Field mode run live against `mcp.aipolicies.eu`. **Z0 baseline 83%** — the model already knew the corpus, and both arms scored below it |
+| ~~P3~~ ✅ | Controlled rig built and validated. **Z0 gate PASSES (0/34)**. 282-run matrix at hard difficulty; every arm exercised live |
+| **P4** ← here | Affordance sweep + dual skill conditions at 40 cores. Nothing survived Holm correction at 6 cores, exactly as the power analysis predicted. The authored skill is committed and its arms are smoked but unrun |
 | **P5** | Surface-size sweep; model-tier axis; MCP-revision axis; second provider; second domain theme (fleet); TS `code-fs` robustness check |
 
 P0's three contracts are pulled forward deliberately: they are cheap to fix now and expensive once traces exist in the wild.

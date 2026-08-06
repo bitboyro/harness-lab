@@ -181,6 +181,12 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
         for r in errors[:5]:
             lines.append(f"    {r['arm']} {r['task_id']}: {str(r['error'])[:70]}")
 
+    # --- what the sweep justifies -----------------------------------------
+    from .justify import effects, report_status
+    if any("@" in n for n in arms):
+        lines += ["", "  lint-rule evidence:"]
+        lines.append(report_status(report))
+
     lines += ["", _footer(report_class, report.truncated_count)]
     return "\n".join(lines)
 
