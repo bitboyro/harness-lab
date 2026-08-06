@@ -10,7 +10,7 @@ from harness.engine.reporting import ArmSummary, render
 from harness.engine.results import ResultStore, Row
 
 BASE = dict(
-    run_id="r1", arm="A1", task_id="t1", core_id="c1", task_class="R", repeat=0,
+    run_id="r1", arm="A1", task_id="t1", core_id="c1", task_class="R", answerable=True, repeat=0,
     outcome="pass", detail="", confident=False, clobbered=(), turns=3, calls=2,
     forbidden_attempts=0, truncated=False, error=None, wall_clock_seconds=1.0,
     input_tokens=1000, cached_input_tokens=0, output_tokens=100,

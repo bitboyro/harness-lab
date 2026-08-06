@@ -177,6 +177,8 @@ class Task(_Model):
     gold_call_sequence: tuple[GoldCall, ...] = ()
     expected_end_state: dict[str, Any] | None = None
     forbidden_calls: tuple[str, ...] = ()
+    #: Why no answer exists. Only meaningful when answerable is false.
+    unanswerable_because: str = ""
 
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 

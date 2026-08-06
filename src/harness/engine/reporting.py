@@ -13,87 +13,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
-from .pricing import ModelPricing, lookup, price_run
-
-#: Outcomes excluded from success rates. Truncation is a budget failure and
-#: ungraded is an absent assertion; neither is a wrong answer.
-_NOT_GRADED = {"truncated", "ungraded"}
-_SUCCESS = {"pass", "correct-refusal"}
-
-
-@dataclass
-class ArmSummary:
-    arm: str
-    rows: list[dict[str, Any]] = field(default_factory=list)
-
-    @property
-    def graded(self) -> list[dict[str, Any]]:
-        return [r for r in self.rows if r["outcome"] not in _NOT_GRADED]
-
-    @property
-    def success_rate(self) -> float | None:
-        graded = self.graded
-        if not graded:
-            return None
-        return sum(1 for r in graded if r["outcome"] in _SUCCESS) / len(graded)
-
-    @property
-    def truncation_rate(self) -> float:
-        return (sum(1 for r in self.rows if r["truncated"]) / len(self.rows)
-                if self.rows else 0.0)
-
-    @property
-    def silent_failure_rate(self) -> float | None:
-        wrong = [r for r in self.graded if r["outcome"] == "fail"]
-        if not wrong:
-            return None
-        return sum(1 for r in wrong if r["confident"]) / len(wrong)
-
-    @property
-    def harm_events(self) -> int:
-        """Clobbered fields plus blocked attempts.
-
-        A guard catching a destructive call does not make the call safe — on a
-        real API there would be no guard, so the attempt is the finding.
-        """
-        return sum(1 for r in self.rows if r["clobbered"] or r["forbidden_attempts"])
-
-    def mean(self, key: str) -> float | None:
-        values = [r[key] for r in self.rows if r.get(key) is not None]
-        return sum(values) / len(values) if values else None
-
-    def cost(self, pricing: ModelPricing):
-        from .pricing import Cost
-        total = Cost()
-        for r in self.rows:
-            run = price_run(
-                pricing,
-                input_tokens=r["input_tokens"],
-                cached_input_tokens=r["cached_input_tokens"],
-                output_tokens=r["output_tokens"],
-            )
-            total = Cost(
-                total.fresh_input_usd + run.fresh_input_usd,
-                total.cached_input_usd + run.cached_input_usd,
-                total.cache_write_usd + run.cache_write_usd,
-                total.output_usd + run.output_usd,
-                run.tier if run.tier == "long" else total.tier,
-            )
-        return total
-
-    def cost_per_success(self, pricing: ModelPricing) -> float | None:
-        successes = sum(1 for r in self.graded if r["outcome"] in _SUCCESS)
-        return self.cost(pricing).total_usd / successes if successes else None
-
-    def by_class(self) -> dict[str, float | None]:
-        buckets: dict[str, list[dict]] = defaultdict(list)
-        for r in self.graded:
-            buckets[r["task_class"]].append(r)
-        return {
-            cls: sum(1 for r in rows if r["outcome"] in _SUCCESS) / len(rows)
-            for cls, rows in sorted(buckets.items())
-        }
-
+from .analysis import NOT_GRADED, SUCCESS, ArmSummary, Report
 
 def _pct(v: float | None) -> str:
     return "  n/a" if v is None else f"{v:5.0%}"
@@ -103,15 +23,22 @@ def _num(v: float | None, width: int = 6) -> str:
     return "n/a".rjust(width) if v is None else f"{v:{width},.1f}"
 
 
-def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None) -> str:
-    """The whole report."""
-    if not rows:
+def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
+           report: Report | None = None) -> str:
+    """The whole report, as text.
+
+    Accepts a prebuilt `Report` so the text and HTML renderers cannot drift:
+    both read one analysis object rather than each computing its own numbers.
+    """
+    if not rows and report is None:
         return "No results. Run `harness run` first."
 
-    manifest = manifest or {}
-    arms: dict[str, ArmSummary] = {}
-    for row in rows:
-        arms.setdefault(row["arm"], ArmSummary(row["arm"])).rows.append(row)
+    report = report or Report(rows=rows, manifest=manifest or {})
+    rows = report.rows
+    if not rows:
+        return "No results. Run `harness run` first."
+    manifest = report.manifest
+    arms = report.arms
 
     lines: list[str] = []
     model = manifest.get("model") or rows[0].get("model", "?")
@@ -125,13 +52,8 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None) -
     # Arms with no MCP transport at all (Z0, the shell arms) carry a null
     # revision. That is an absence, not a different revision, and treating it
     # as one would make every run containing a control look unpoolable.
-    worlds = {(r["model"], r["mcp_spec_revision"], r["skill_condition"],
-               r["report_class"])
-              for r in rows if r["mcp_spec_revision"] is not None}
-    worlds |= {(r["model"], None, r["skill_condition"], r["report_class"])
-               for r in rows if r["mcp_spec_revision"] is None
-               and not any(x["mcp_spec_revision"] for x in rows)}
-    if len(worlds) > 1:
+    worlds = report.worlds
+    if report.pooling_refused:
         lines.append("REFUSING TO POOL — these rows describe different worlds:")
         for w in sorted(map(str, worlds)):
             lines.append(f"  {w}")
@@ -140,8 +62,8 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None) -
         lines.append("")
 
     # --- baseline ---------------------------------------------------------
-    z0 = arms.get("Z0")
-    baseline = z0.success_rate if z0 else None
+    baseline = report.baseline
+    gate = report.z0_gate
     if baseline is None:
         lines.append("No Z0 baseline in this run — without it these numbers "
                      "cannot be read as lift.")
@@ -149,10 +71,9 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None) -
         # The gate counts only *substantive* correct answers. With no tools,
         # correctly declining an unanswerable task is the expected behaviour —
         # scoring it as knowledge of the domain would fail every clean rig.
-        answered = sum(1 for r in z0.graded if r["outcome"] == "pass")
-        gated = len(z0.graded)
+        passed, answered, gated = gate
         score = answered / gated if gated else 0.0
-        verdict = "PASS" if score <= 0.05 else "FAIL — DOMAIN CONTAMINATED"
+        verdict = "PASS" if passed else "FAIL — DOMAIN CONTAMINATED"
         lines.append(f"Z0 gate: {verdict} — {answered}/{gated} tasks answered "
                      f"correctly with no API access ({score:.0%})")
         if baseline != score:
@@ -167,8 +88,7 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None) -
               f"{'static':>8} {'trunc':>6} {'harm':>5}")
     lines += [header, "  " + "-" * (len(header) - 2)]
     for name, arm in sorted(arms.items()):
-        lift = (arm.success_rate - baseline
-                if baseline is not None and arm.success_rate is not None else None)
+        lift = report.lift(name)
         lines.append(
             f"  {name:<8} {_pct(arm.success_rate)} "
             f"{('  n/a' if lift is None else f'{lift:+5.0%}')} "
@@ -178,7 +98,7 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None) -
         )
 
     # --- by task class ----------------------------------------------------
-    classes = sorted({r["task_class"] for r in rows})
+    classes = report.task_classes
     if len(classes) > 1:
         lines += ["", "  success by task class (RQ4 — does the ranking reverse?):"]
         lines.append("    " + "arm".ljust(8) + "".join(c.rjust(9) for c in classes))
@@ -188,18 +108,13 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None) -
                          + "".join(_pct(per.get(c)).rjust(9) for c in classes))
 
     # --- cost -------------------------------------------------------------
-    try:
-        pricing = lookup(model)
-    except Exception:  # noqa: BLE001 — an unpriced model still reports everything else
-        pricing = None
+    pricing = report.pricing
     if pricing:
         lines += ["", "  cost (actual usage):"]
         lines.append(f"    {'arm':<8} {'total':>10} {'per success':>12} {'cached':>8}")
         for name, arm in sorted(arms.items()):
             per = arm.cost_per_success(pricing)
-            cached = arm.mean("cached_input_tokens")
-            total_in = arm.mean("input_tokens")
-            hit = cached / total_in if cached and total_in else 0.0
+            hit = arm.cache_hit_rate() or 0.0
             lines.append(
                 f"    {name:<8} {'$' + format(arm.cost(pricing).total_usd, '.4f'):>10} "
                 f"{('$' + format(per, '.4f')) if per else 'n/a':>12} {hit:>7.0%}"
@@ -213,18 +128,17 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None) -
         for name, rate in sorted(silent.items()):
             lines.append(f"    {name}: {rate:.0%}")
 
-    errors = [r for r in rows if r["error"]]
+    errors = report.error_rows
     if errors:
         lines += ["", f"  {len(errors)} harness errors (excluded from rates):"]
         for r in errors[:5]:
             lines.append(f"    {r['arm']} {r['task_id']}: {str(r['error'])[:70]}")
 
-    lines += ["", _footer(report_class, rows)]
+    lines += ["", _footer(report_class, report.truncated_count)]
     return "\n".join(lines)
 
 
-def _footer(report_class: str, rows: list[dict[str, Any]]) -> str:
-    truncated = sum(1 for r in rows if r["truncated"])
+def _footer(report_class: str, truncated: int) -> str:
     parts = [
         "All metrics are unvalidated: their relationship to ground truth has "
         "not been established on the controlled rig."

@@ -341,9 +341,30 @@ def cmd_run(args: argparse.Namespace) -> int:
                   f"{type(e).__name__}: {str(e)[:50]}")
 
     print()
-    print(render(list(store.rows()), store.manifest()))
+    print(render(list(store.rows()), store.manifest(),
+                 report=_build_report(store)))
     print(f"\nresults: {args.out}/results.jsonl   traces: {args.out}/traces/")
+    print(f"html:    harness report {args.out} --html {args.out}/report.html")
     return 0
+
+
+def _build_report(store, *, mde_pp: float | None = None):
+    """One analysis object for every renderer.
+
+    The MDE is computed here and passed in: power lives in `experiment` and the
+    engine must not import it (plan.md §2).
+    """
+    from .engine.analysis import Report
+
+    manifest = store.manifest()
+    if mde_pp is None and manifest.get("cores"):
+        try:
+            from .experiment.power import Contrast, analyse
+            mde_pp = analyse(Contrast.MAIN_EFFECT, int(manifest["cores"]),
+                             repeats=int(manifest.get("repeats", 1))).mde_pp
+        except Exception:  # noqa: BLE001 — a missing MDE only drops one banner
+            mde_pp = None
+    return Report(rows=list(store.rows()), manifest=manifest, mde_pp=mde_pp)
 
 
 def cmd_report(args: argparse.Namespace) -> int:
@@ -357,6 +378,24 @@ def cmd_report(args: argparse.Namespace) -> int:
         print(f"no results in {args.results}")
         return 1
 
+    report = _build_report(store)
+
+    if args.html or args.charts:
+        from .engine.html import build_charts, standalone_html
+        if args.html:
+            out = Path(args.html)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(standalone_html(report), encoding="utf-8")
+            print(f"wrote {out}")
+        if args.charts:
+            charts_dir = Path(args.charts)
+            charts_dir.mkdir(parents=True, exist_ok=True)
+            for name, svg in build_charts(report).items():
+                (charts_dir / f"{name}.svg").write_text(svg, encoding="utf-8")
+            print(f"wrote {len(build_charts(report))} charts to {charts_dir}/")
+        if not args.csv:
+            return 0
+
     if args.csv:
         import csv
         import sys as _sys
@@ -366,7 +405,7 @@ def cmd_report(args: argparse.Namespace) -> int:
         writer.writerows(flat)
         return 0
 
-    print(render(rows, store.manifest()))
+    print(render(rows, store.manifest(), report=report))
     return 0
 
 
@@ -438,6 +477,10 @@ def build_parser() -> argparse.ArgumentParser:
     report_p.add_argument("results", nargs="?", default="results")
     report_p.add_argument("--csv", action="store_true",
                           help="dump rows as CSV for your own analysis")
+    report_p.add_argument("--html", metavar="PATH",
+                          help="write a self-contained HTML report")
+    report_p.add_argument("--charts", metavar="DIR",
+                          help="write each chart as a standalone .svg")
     report_p.set_defaults(func=cmd_report)
 
     plan_p = sub.add_parser("plan", help="cost projection and approval")

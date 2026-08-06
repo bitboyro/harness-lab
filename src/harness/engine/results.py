@@ -40,6 +40,7 @@ class Row:
     task_id: str
     core_id: str | None
     task_class: str
+    answerable: bool
     repeat: int
     outcome: str
     detail: str
@@ -151,6 +152,7 @@ def build_row(
         task_id=task.id,
         core_id=task.core_id,
         task_class=str(task.task_class),
+        answerable=task.answerable,
         repeat=repeat,
         outcome=str(grade.outcome),
         detail=grade.detail[:300],

@@ -85,6 +85,7 @@ tasks:
 
     expected_end_state: {}      # optional; write tasks, graded on final state not transcript
     forbidden_calls: []         # optional; task-scoped, adds to the global list
+    unanswerable_because: str   # optional; why no answer exists (answerable: false)
 ```
 
 ### Rules the loader enforces
@@ -130,6 +131,7 @@ The freeze check. Every field, and the one thing that reads it. **A field with n
 | `tasks[].gold_call_sequence[].args` | Argument-validity metric | Separates *chose the wrong tool* from *chose the right tool, called it wrong* — the two failures have different fixes |
 | `tasks[].expected_end_state` | Grader (state target) | Writes graded on final state |
 | `tasks[].forbidden_calls` | Executor interceptor | Task-scoped harm bounds |
+| `tasks[].unanswerable_because` | Report (false-positive detail) | Lets a fabricated answer be read against what was actually missing, rather than only counted |
 
 **Cut during the audit, recorded so they are not re-proposed:** `tasks[].timeout` (belongs to the run plan, not the pack — it is a harness setting, not a property of the task), `tasks[].tags` (no consumer; `class` and `difficulty` already carry every slice the report uses), and `tasks[].max_turns` (same reason as `timeout`).
 

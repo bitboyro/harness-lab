@@ -1,0 +1,18 @@
+{
+  "created_at": "2026-08-06T13:12:53.646568+00:00",
+  "id": "unanswerable-probe",
+  "model": "gpt-5.6-luna",
+  "provider": "openai",
+  "presets": [
+    "A1",
+    "C1"
+  ],
+  "cores": 4,
+  "repeats": 1,
+  "seed": 1,
+  "surface_size": 0,
+  "fan_out": 4,
+  "reasoning_effort": "low",
+  "report_class": "controlled",
+  "tasks": 23
+}
