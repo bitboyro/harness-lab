@@ -142,6 +142,7 @@ def build_charts(report: Report) -> dict[str, str]:
                   for a in arms]
     if any(any(row) for row in token_data):
         charts["tokens"] = stacked_bars(arms, token_names, token_data,
+                                        show_total=False,
                                         title="Token components per run")
 
     # 6. Confusion matrices, one per arm.

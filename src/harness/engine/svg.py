@@ -242,7 +242,7 @@ def bar_chart(bars: Sequence[Bar], *, title: str, unit: str = "%",
 
 def stacked_bars(labels: Sequence[str], segments: Sequence[str],
                  data: Sequence[Sequence[float]], *, title: str,
-                 fills: Sequence[str] | None = None,
+                 fills: Sequence[str] | None = None, show_total: bool = True,
                  width: int = 680, row_height: int = 30) -> str:
     """One row per label; segments in fixed slot order, 2px surface gaps."""
     if not labels:
@@ -281,9 +281,12 @@ def stacked_bars(labels: Sequence[str], segments: Sequence[str],
                     f'stroke-width:0">{int(value)}</text>'
                 )
             cursor += seg_w
-        parts.append(f'<text x="{width - pad_r + 6}" '
-                     f'y="{y + row_height / 2 + 4:.1f}" font-size="10" '
-                     f'fill="var(--text-muted)">n={int(totals[i])}</text>')
+        if show_total:
+            # Only meaningful when segments are run counts. On a token stack
+            # "n=1604" reads as 1604 runs, which is a different number entirely.
+            parts.append(f'<text x="{width - pad_r + 6}" '
+                         f'y="{y + row_height / 2 + 4:.1f}" font-size="10" '
+                         f'fill="var(--text-muted)">n={int(totals[i])}</text>')
     return _svg(width, height, "".join(parts), title)
 
 
