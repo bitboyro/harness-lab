@@ -1,6 +1,11 @@
 .env
 .env.*
 !.env.example
+
+# Full trajectories: ~200KB per run, so a full matrix is hundreds of MB. The
+# analysable ledger (results.jsonl) and manifest ARE committed — those are what
+# a reader needs to check a claim. Traces stay local and are published as a
+# separate corpus when results are, per spec §6.4 deliverable 6.
 traces/
 .venv/
 __pycache__/
