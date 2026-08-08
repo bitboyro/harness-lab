@@ -1,0 +1,56 @@
+.env
+.env.*
+!.env.example
+
+# Run output. A real matrix is hundreds of MB, so it goes out as a separate
+# corpus rather than as repo history.
+#
+# `results/*` and not `results/`: git will not descend into an excluded
+# directory, so a negation below it never matches. Excluding the *contents* is
+# what leaves the door open for the one exception.
+results/*
+traces/
+
+# That exception: a genuine 9-run result, kept so `report` and `transcript`
+# have something to open the minute someone installs this. A screenshot would
+# not survive a change to the renderers; this does, because the examples in the
+# docs are produced by running the commands against it. Traces are gzipped —
+# 3.6 MB of JSON became 464 KB, and the loaders read either form.
+!results/auth-smoke/
+# `traces/` above matches at any depth, including inside the exception, so the
+# re-include has to name it too.
+!results/auth-smoke/traces/
+
+# Build artifacts
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Local throwaway scripts. Leading slash: unanchored, `scripts/` also matches
+# src/harness/agent_skills/harness-insights/scripts/, which ships in the wheel
+# and which the skill cannot run without.
+/scripts/
+
+# Everything we keep but do not distribute. Two kinds live here, and the
+# difference matters:
+#
+#   reference/, ROADMAP.md  — current and load-bearing. The reference contracts
+#                             are the rationale `Contract:` docstrings cite by
+#                             anchor; the roadmap is internal planning. Neither
+#                             is a customer's business, so neither is in the
+#                             repo or the bundle.
+#   everything else         — genuinely superseded design records, also kept on
+#                             the archive/p0-contracts branch.
+#
+# tests/test_docs.py checks the citations in full when this directory is
+# present and skips when it is not, so a checkout without it still passes.
+archive/
+
+# Local noise
+.DS_Store
+.playwright-mcp/
+recordings/

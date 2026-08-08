@@ -1,0 +1,79 @@
+name: release
+
+# Tag push builds the release artifacts and attaches them.
+#
+# No build matrix. The wheel is `py3-none-any` — one file for every OS and every
+# Python 3.11+ — so there is nothing per-platform to build. pip resolves the
+# native dependencies (pydantic_core) on the installing machine, which is where
+# that decision belongs.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Every interpreter the package claims to support. `requires-python`
+        # is a promise, and this is the only thing that checks it.
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e '.[dev,openai]'
+      # No network and no API key. The suite is expected to run this way, and a
+      # release that needs our credentials to verify is one only we can verify.
+      - run: python -m pytest -q
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: ./build.sh
+
+      - name: Install it the way a recipient would
+        run: |
+          set -euo pipefail
+          # A scratch directory with no checkout in it: installing from the repo
+          # would test the source tree, not the artifact.
+          tmp=$(mktemp -d)
+          unzip -q dist/harness-lab-*.zip -d "$tmp"
+          cd "$tmp"/harness-lab-*
+          python3 -m venv .venv
+          .venv/bin/python install.py
+          .venv/bin/harness --version
+          .venv/bin/harness doctor
+          .venv/bin/harness lint --demo
+          .venv/bin/python -m harness lint --demo
+          .venv/bin/harness init --agent both --dir .
+          test -f .claude/skills/harness-field-pack/SKILL.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

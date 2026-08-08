@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "harness-lab"
+dynamic = ["version"]
+description = "Measures how packaging a REST API affects an LLM agent's ability to use it"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+openai = ["openai>=1.60"]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+harness = "harness.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "harness.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Shipped inside the wheel so an installed user reaches the same material a
+# clone does: `harness init` writes the agent skills out of here, and the
+# authored skill is what the `-auth` arms read at run time.
+[tool.setuptools.package-data]
+harness = [
+    "agent_skills/**/*",
+    "experiment/skills/*.md",
+    "examples/*",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

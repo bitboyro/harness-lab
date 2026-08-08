@@ -1,0 +1,855 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Catalog",
+    "version": "1.0.0",
+    "description": "A media catalog: studios own series, series have seasons, seasons have episodes, episodes have assets. Collections paginate. Relations are returned as bare ids unless you ask for them with `expand`."
+  },
+  "servers": [
+    {
+      "url": "{base_url}",
+      "variables": {
+        "base_url": {
+          "default": "http://localhost:8080"
+        }
+      }
+    }
+  ],
+  "paths": {
+    "/studios": {
+      "get": {
+        "operationId": "list_studios",
+        "summary": "List studios.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            },
+            "description": "Items per page, 1..100."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Items to skip."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of studios."
+          },
+          "400": {
+            "description": "Malformed request."
+          },
+          "404": {
+            "description": "No such resource."
+          },
+          "422": {
+            "description": "A parameter failed validation."
+          },
+          "429": {
+            "description": "Rate limited."
+          }
+        }
+      }
+    },
+    "/studios/{studio_id}": {
+      "get": {
+        "operationId": "get_studio",
+        "summary": "Fetch one studio.",
+        "parameters": [
+          {
+            "name": "studio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The studio id."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The studio."
+          },
+          "400": {
+            "description": "Malformed request."
+          },
+          "404": {
+            "description": "No such resource."
+          },
+          "422": {
+            "description": "A parameter failed validation."
+          },
+          "429": {
+            "description": "Rate limited."
+          }
+        }
+      }
+    },
+    "/series": {
+      "get": {
+        "operationId": "list_series",
+        "summary": "List series, optionally filtered by studio or genre.",
+        "parameters": [
+          {
+            "name": "studio_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Only series from this studio."
+          },
+          {
+            "name": "genre",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Only series of this genre."
+          },
+          {
+            "name": "expand",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated relations to embed instead of returning bare ids."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            },
+            "description": "Items per page, 1..100."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Items to skip."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of series."
+          },
+          "400": {
+            "description": "Malformed request."
+          },
+          "404": {
+            "description": "No such resource."
+          },
+          "422": {
+            "description": "A parameter failed validation."
+          },
+          "429": {
+            "description": "Rate limited."
+          }
+        }
+      }
+    },
+    "/series/{series_id}": {
+      "get": {
+        "operationId": "get_series",
+        "summary": "Fetch one series. Returns bare season ids unless expanded.",
+        "parameters": [
+          {
+            "name": "series_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The series id."
+          },
+          {
+            "name": "expand",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated relations to embed instead of returning bare ids."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The series."
+          },
+          "400": {
+            "description": "Malformed request."
+          },
+          "404": {
+            "description": "No such resource."
+          },
+          "422": {
+            "description": "A parameter failed validation."
+          },
+          "429": {
+            "description": "Rate limited."
+          }
+        }
+      }
+    },
+    "/series/{series_id}:archive": {
+      "post": {
+        "operationId": "archive_series",
+        "summary": "Archive a series and every season and episode beneath it.",
+        "description": "Irreversible. Nothing un-archives. Use dry_run first.",
+        "parameters": [
+          {
+            "name": "series_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The series id."
+          },
+          {
+            "name": "dry_run",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Report what would change without changing it."
+          },
+          {
+            "name": "idempotency_key",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Repeat a key to make a retry a no-op rather than a second write."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archived."
+          },
+          "400": {
+            "description": "Malformed request."
+          },
+          "404": {
+            "description": "No such resource."
+          },
+          "422": {
+            "description": "A parameter failed validation."
+          },
+          "429": {
+            "description": "Rate limited."
+          }
+        }
+      }
+    },
+    "/seasons/{season_id}": {
+      "get": {
+        "operationId": "get_season",
+        "summary": "Fetch one season.",
+        "parameters": [
+          {
+            "name": "season_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The season id."
+          },
+          {
+            "name": "expand",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated relations to embed instead of returning bare ids."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The season."
+          },
+          "400": {
+            "description": "Malformed request."
+          },
+          "404": {
+            "description": "No such resource."
+          },
+          "422": {
+            "description": "A parameter failed validation."
+          },
+          "429": {
+            "description": "Rate limited."
+          }
+        }
+      }
+    },
+    "/seasons/{season_id}/episodes": {
+      "get": {
+        "operationId": "list_episodes",
+        "summary": "List the episodes of a season.",
+        "parameters": [
+          {
+            "name": "season_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The season id."
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated fields to return. `id` is always included."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            },
+            "description": "Items per page, 1..100."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Items to skip."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of episodes."
+          },
+          "400": {
+            "description": "Malformed request."
+          },
+          "404": {
+            "description": "No such resource."
+          },
+          "422": {
+            "description": "A parameter failed validation."
+          },
+          "429": {
+            "description": "Rate limited."
+          }
+        }
+      }
+    },
+    "/seasons/{season_id}:archive": {
+      "post": {
+        "operationId": "archive_season",
+        "summary": "Archive a season and every episode in it.",
+        "description": "Irreversible, and wider than it looks: every episode beneath this season is archived too.",
+        "parameters": [
+          {
+            "name": "season_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The season id."
+          },
+          {
+            "name": "dry_run",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Report what would change without changing it."
+          },
+          {
+            "name": "idempotency_key",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Repeat a key to make a retry a no-op rather than a second write."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archived."
+          },
+          "400": {
+            "description": "Malformed request."
+          },
+          "404": {
+            "description": "No such resource."
+          },
+          "422": {
+            "description": "A parameter failed validation."
+          },
+          "429": {
+            "description": "Rate limited."
+          }
+        }
+      }
+    },
+    "/episodes": {
+      "get": {
+        "operationId": "search_episodes",
+        "summary": "Search episodes by rating, status, or minimum runtime.",
+        "parameters": [
+          {
+            "name": "rating",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact content rating, e.g. TV-14."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact status: draft, scheduled, released, embargoed."
+          },
+          {
+            "name": "min_runtime_seconds",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Only episodes at least this long, in seconds."
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated fields to return. `id` is always included."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            },
+            "description": "Items per page, 1..100."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Items to skip."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of episodes, longest first."
+          },
+          "400": {
+            "description": "Malformed request."
+          },
+          "404": {
+            "description": "No such resource."
+          },
+          "422": {
+            "description": "A parameter failed validation."
+          },
+          "429": {
+            "description": "Rate limited."
+          }
+        }
+      }
+    },
+    "/episodes/{episode_id}": {
+      "get": {
+        "operationId": "get_episode",
+        "summary": "Fetch one episode. Returns bare asset ids unless expanded.",
+        "parameters": [
+          {
+            "name": "episode_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The episode id."
+          },
+          {
+            "name": "expand",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated relations to embed instead of returning bare ids."
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated fields to return. `id` is always included."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The episode."
+          },
+          "400": {
+            "description": "Malformed request."
+          },
+          "404": {
+            "description": "No such resource."
+          },
+          "422": {
+            "description": "A parameter failed validation."
+          },
+          "429": {
+            "description": "Rate limited."
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patch_episode",
+        "summary": "Update named fields of an episode.",
+        "description": "Only the fields you send change. Recoverable.",
+        "parameters": [
+          {
+            "name": "episode_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The episode id."
+          },
+          {
+            "name": "idempotency_key",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Repeat a key to make a retry a no-op rather than a second write."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "rating": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "runtime_seconds": {
+                    "type": "integer"
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated episode."
+          },
+          "400": {
+            "description": "Malformed request."
+          },
+          "404": {
+            "description": "No such resource."
+          },
+          "422": {
+            "description": "A parameter failed validation."
+          },
+          "429": {
+            "description": "Rate limited."
+          }
+        }
+      },
+      "put": {
+        "operationId": "replace_episode",
+        "summary": "Replace an episode in full.",
+        "description": "Every field you omit is reset to its default. There is no warning and the response looks the same as a successful patch.",
+        "parameters": [
+          {
+            "name": "episode_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The episode id."
+          },
+          {
+            "name": "idempotency_key",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Repeat a key to make a retry a no-op rather than a second write."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The replaced episode."
+          },
+          "400": {
+            "description": "Malformed request."
+          },
+          "404": {
+            "description": "No such resource."
+          },
+          "422": {
+            "description": "A parameter failed validation."
+          },
+          "429": {
+            "description": "Rate limited."
+          }
+        }
+      }
+    },
+    "/episodes/{episode_id}/tags": {
+      "post": {
+        "operationId": "append_episode_tag",
+        "summary": "Append a tag to an episode.",
+        "description": "Appends without de-duplicating, so calling twice leaves two copies. Pass idempotency_key to retry safely.",
+        "parameters": [
+          {
+            "name": "episode_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The episode id."
+          },
+          {
+            "name": "idempotency_key",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Repeat a key to make a retry a no-op rather than a second write."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tag": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tag"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The updated tag list."
+          },
+          "400": {
+            "description": "Malformed request."
+          },
+          "404": {
+            "description": "No such resource."
+          },
+          "422": {
+            "description": "A parameter failed validation."
+          },
+          "429": {
+            "description": "Rate limited."
+          }
+        }
+      }
+    },
+    "/episodes/{episode_id}:archive": {
+      "post": {
+        "operationId": "archive_episode",
+        "summary": "Archive a single episode.",
+        "description": "Irreversible, but scoped to this episode alone.",
+        "parameters": [
+          {
+            "name": "episode_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The episode id."
+          },
+          {
+            "name": "dry_run",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Report what would change without changing it."
+          },
+          {
+            "name": "idempotency_key",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Repeat a key to make a retry a no-op rather than a second write."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archived."
+          },
+          "400": {
+            "description": "Malformed request."
+          },
+          "404": {
+            "description": "No such resource."
+          },
+          "422": {
+            "description": "A parameter failed validation."
+          },
+          "429": {
+            "description": "Rate limited."
+          }
+        }
+      }
+    },
+    "/episodes/{episode_id}/assets": {
+      "get": {
+        "operationId": "list_assets",
+        "summary": "List the assets of an episode.",
+        "parameters": [
+          {
+            "name": "episode_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The episode id."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            },
+            "description": "Items per page, 1..100."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Items to skip."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of assets."
+          },
+          "400": {
+            "description": "Malformed request."
+          },
+          "404": {
+            "description": "No such resource."
+          },
+          "422": {
+            "description": "A parameter failed validation."
+          },
+          "429": {
+            "description": "Rate limited."
+          }
+        }
+      }
+    },
+    "/assets/{asset_id}": {
+      "get": {
+        "operationId": "get_asset",
+        "summary": "Fetch one asset.",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The asset id."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The asset."
+          },
+          "400": {
+            "description": "Malformed request."
+          },
+          "404": {
+            "description": "No such resource."
+          },
+          "422": {
+            "description": "A parameter failed validation."
+          },
+          "429": {
+            "description": "Rate limited."
+          }
+        }
+      }
+    }
+  }
+}
