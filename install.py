@@ -1,10 +1,23 @@
 #!/usr/bin/env python3
 """Install harness-lab, and say plainly what is missing if it cannot.
 
-    python3 install.py                      # find the wheel next to this file
+    python3 install.py                      # the wheel next to this file
+    python3 install.py --download           # fetch the latest release instead
     python3 install.py harness_lab-*.whl    # or point at one
     python3 install.py --user               # no virtualenv available
     python3 install.py --check              # report only, install nothing
+
+Two ways to get the wheel, because there are two kinds of person running this.
+Someone handed the release zip has the wheel already, next to this script, and
+should not need credentials or a network to install it. Someone working from
+the repo would rather not build first — `--download` pulls the latest release
+for them.
+
+`--download` needs the `gh` CLI, authenticated. That is not a convenience: the
+repo is private, so the download is authenticated no matter what, and letting
+`gh` hold the token means this script never handles one. A token in an argv
+string is readable by every process on the machine and tends to end up in shell
+history and CI logs, which is how the shell installer this replaced leaked.
 
 Written in deliberately old Python syntax and importing nothing outside the
 standard library, because the most common reason this fails is that the
@@ -19,9 +32,11 @@ import glob
 import os
 import subprocess
 import sys
+import tempfile
 
 MINIMUM = (3, 11)
 PACKAGE = "harness-lab"
+REPO = "bitboyro/harness-lab"
 
 
 def say(msg=""):
@@ -77,7 +92,73 @@ def find_wheel(argv_path):
         if found:
             return found[-1], None
     return None, ("no harness_lab-*.whl found next to this script or in "
-                  "./dist. Pass one as an argument, or run ./build.sh first.")
+                  "./dist.\n"
+                  "       Either:  python3 %s --download   (needs `gh`, "
+                  "authenticated)\n"
+                  "       or pass one as an argument, or run ./build.sh first."
+                  % os.path.basename(__file__))
+
+
+def _have(program):
+    for directory in os.environ.get("PATH", "").split(os.pathsep):
+        if os.path.isfile(os.path.join(directory, program)):
+            return True
+    return False
+
+
+def download_wheel(tag):
+    """Fetch a release wheel with `gh`, which already holds the credentials.
+
+    Returns (path, problem). The wheel lands in a temp directory we do not
+    clean up: pip has already read it by the time we are done, and leaving it
+    means a failed install can be retried without a second download.
+    """
+    if not _have("gh"):
+        return None, (
+            "--download needs the GitHub CLI, and `gh` is not on PATH.\n"
+            "       macOS:   brew install gh\n"
+            "       Debian:  sudo apt install gh\n"
+            "       others:  https://cli.github.com\n"
+            "       Then:    gh auth login\n"
+            "       Or install from a release zip, which needs neither.")
+
+    status = subprocess.call(["gh", "auth", "status"],
+                             stdout=_devnull(), stderr=subprocess.STDOUT)
+    if status != 0:
+        return None, ("`gh` is installed but not logged in. Run:  gh auth login\n"
+                      "       %s is private, so the download is authenticated."
+                      % REPO)
+
+    target = tempfile.mkdtemp(prefix="harness-lab-")
+    cmd = ["gh", "release", "download"]
+    if tag:
+        cmd.append(tag)
+    cmd += ["--repo", REPO, "--pattern", "harness_lab-*.whl", "--dir", target]
+    say("\n==> %s" % " ".join(cmd))
+    if subprocess.call(cmd) != 0:
+        return None, (
+            "gh could not download a release wheel (see its output above).\n"
+            "       If this says 'release not found', none has been published "
+            "yet —\n"
+            "       build one locally instead:  ./build.sh")
+
+    found = sorted(glob.glob(os.path.join(target, "harness_lab-*.whl")))
+    if not found:
+        return None, "the release contains no harness_lab-*.whl"
+    return found[-1], None
+
+
+def _devnull():
+    return open(os.devnull, "w")
+
+
+def _flag_value(flags, name):
+    """`--tag=v0.1.0` — the `=` form only, so the arg parser stays trivial."""
+    prefix = name + "="
+    for flag in flags:
+        if flag.startswith(prefix):
+            return flag[len(prefix):]
+    return None
 
 
 def in_virtualenv():
@@ -117,7 +198,10 @@ def main(argv):
         say("Checks passed. Re-run without --check to install.")
         return 0
 
-    wheel, problem = find_wheel(args[0] if args else None)
+    if any(f == "--download" or f.startswith("--tag=") for f in flags):
+        wheel, problem = download_wheel(_flag_value(flags, "--tag"))
+    else:
+        wheel, problem = find_wheel(args[0] if args else None)
     if problem:
         return fail(problem)
     say("Installing %s" % os.path.basename(wheel))

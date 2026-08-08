@@ -14,7 +14,7 @@ Build everything needed for a **field** harness run: surface discovery, pack,
 safety, model/params, arms, and suite quality. Do not invent metrics from
 memory — quote lint/run/report output.
 
-Canonical docs: `docs/your-api.md`, `docs/task-packs.md`,
+Canonical docs: `docs/test-your-api-harness.md`, `docs/design-your-test-run.md`,
 `docs/reading-results.md`. For the install, the command ladder and what may be
 claimed from a result, use the **harness-lab** skill.
 

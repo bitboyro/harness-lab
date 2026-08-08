@@ -912,7 +912,7 @@ def cmd_init(args: argparse.Namespace) -> int:
 #: scaffold derives a pack from a surface you already have, this one is for
 #: somebody who wants to see the shape before pointing it at anything.
 _PACK_TEMPLATE = """\
-# A harness task pack. See docs/task-packs.md for every field.
+# A harness task pack. See docs/design-your-test-run.md for every field.
 schema_version: 1
 
 pack:

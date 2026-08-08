@@ -2,12 +2,24 @@
 .env.*
 !.env.example
 
-# Run output. Nothing under results/ is committed: a ledger is only meaningful
-# beside the traces and manifest that produced it, and those are hundreds of MB
-# per matrix. Published runs go out as a separate corpus, per spec §6.4
-# deliverable 6 — not as repo history.
-results/
+# Run output. A real matrix is hundreds of MB, so it goes out as a separate
+# corpus rather than as repo history.
+#
+# `results/*` and not `results/`: git will not descend into an excluded
+# directory, so a negation below it never matches. Excluding the *contents* is
+# what leaves the door open for the one exception.
+results/*
 traces/
+
+# That exception: a genuine 9-run result, kept so `report` and `transcript`
+# have something to open the minute someone installs this. A screenshot would
+# not survive a change to the renderers; this does, because the examples in the
+# docs are produced by running the commands against it. Traces are gzipped —
+# 3.6 MB of JSON became 464 KB, and the loaders read either form.
+!results/auth-smoke/
+# `traces/` above matches at any depth, including inside the exception, so the
+# re-include has to name it too.
+!results/auth-smoke/traces/
 
 # Build artifacts
 .venv/
@@ -36,3 +48,4 @@ archive/
 # Local noise
 .DS_Store
 .playwright-mcp/
+recordings/

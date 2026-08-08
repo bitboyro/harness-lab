@@ -1,4 +1,9 @@
-# Task Pack Schema
+# Design your test run
+
+The task pack is where you decide what the run actually measures: which API,
+which tasks, what counts as a right answer, and what the agent is not allowed
+to touch. Everything downstream — grader, metrics, report class — is shaped by
+what you put here.
 
 **Status:** Contract — frozen at P0, versioned thereafter
 **Schema version:** `1`

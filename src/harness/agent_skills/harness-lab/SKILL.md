@@ -150,7 +150,7 @@ the caveat protects and let them decide. Do not quietly remove it.
 
 ## Docs on disk
 
-`docs/install.md`, `docs/your-api.md`, `docs/task-packs.md`,
+`docs/install.md`, `docs/test-your-api-harness.md`, `docs/design-your-test-run.md`,
 `docs/controlled-rig.md`, `docs/reading-results.md`. Read the relevant one
 before changing behaviour it describes; quote it rather than paraphrasing from
 memory.

@@ -183,7 +183,7 @@ def test_typos_are_rejected_rather_than_ignored() -> None:
 def test_documented_examples_load() -> None:
     """The worked examples in the contract must actually be valid packs."""
     import re
-    doc = Path(__file__).resolve().parents[1] / "docs" / "task-packs.md"
+    doc = Path(__file__).resolve().parents[1] / "docs" / "design-your-test-run.md"
     blocks = re.findall(r"```yaml\n(.*?)```", doc.read_text(), re.S)
     packs = [b for b in blocks if "schema_version" in b and "pack:" in b]
     assert len(packs) >= 2, "expected the mock-API and field examples"

@@ -51,7 +51,7 @@ A smoke run that exercises the whole pipeline cheaply:
 harness run --out /tmp/smoke --id smoke --smoke --yes
 ```
 
-`docs/controlled-rig.md` is the operator manual — the recommended 40-core matrix, resume, and what a broken run looks like. `docs/your-api.md` covers field mode, and `docs/reading-results.md` covers how the winner is scored.
+`docs/controlled-rig.md` is the operator manual — the recommended 40-core matrix, resume, and what a broken run looks like. `docs/test-your-api-harness.md` covers field mode, and `docs/reading-results.md` covers how the winner is scored.
 
 ## Architecture
 
@@ -107,8 +107,8 @@ Docs are the reasoning trail, and code comments cite them by ID (`L1`, `F4`, `G6
 
 | File | Ships | Role |
 |---|---|---|
-| `docs/install.md`, `your-api.md`, `controlled-rig.md`, `reading-results.md` | yes | The four reader-facing guides |
-| `docs/task-packs.md` | yes | Frozen contract: the interop format that makes bring-your-own-API possible |
+| `docs/install.md`, `test-your-api-harness.md`, `controlled-rig.md`, `reading-results.md` | yes | The four reader-facing guides |
+| `docs/design-your-test-run.md` | yes | Frozen contract: the interop format that makes bring-your-own-API possible |
 | `archive/reference/experiment-design.md` | no | Research requirements: RQs, the test API, metrics, validity controls |
 | `archive/reference/packaging-axes.md` | no | Frozen contract: axes, plugin interface, preset table |
 | `archive/reference/statistics.md` | no | Model, power/MDE, confirmatory vs. exploratory split — written before any matrix ran |
