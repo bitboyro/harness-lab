@@ -19,7 +19,7 @@ matter to this benchmark specifically:
    fall off a cliff rather than sliding down a ramp — and that is precisely what
    the surface-size sweep is looking for.
 
-Contract: docs/reference/experiment-design.md#cost
+Contract: archive/reference/experiment-design.md#cost
 """
 
 from __future__ import annotations

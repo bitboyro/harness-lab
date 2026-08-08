@@ -6,7 +6,7 @@ vendor agent SDK would inject an uncontrolled harness into the measurement. The
 adapter translates one request and one response; every decision about what
 happens next lives here.
 
-Contract: docs/reference/experiment-design.md#the-agent-loop
+Contract: archive/reference/experiment-design.md#the-agent-loop
 """
 
 from __future__ import annotations

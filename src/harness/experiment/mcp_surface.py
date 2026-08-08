@@ -10,7 +10,7 @@ Both spec revisions are served, because the cost asymmetry between them is
 itself an axis: legacy pays a per-session handshake, 2026-07-28 pays a per-call
 `_meta` tax that scales with call count.
 
-Contract: docs/reference/packaging-axes.md; docs/reference/decisions.md F3
+Contract: archive/reference/packaging-axes.md; archive/reference/decisions.md F3
 """
 
 from __future__ import annotations

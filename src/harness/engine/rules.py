@@ -11,7 +11,7 @@ state, not an oversight: nothing has been measured yet. Filling these in is the
 work of P4, and a rule that never earns a citation should be deleted rather than
 quietly kept.
 
-Contract: docs/reference/decisions.md G2
+Contract: archive/reference/decisions.md G2
 """
 
 from __future__ import annotations

@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from harness.engine.generate import ApiSpec, Operation, load_spec
 from harness.engine.taskpack import TaskPack
 from harness.scaffold import build, is_read, to_yaml
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def _op(operation_id: str, method: str = "get", path: str | None = None) -> Operation:
@@ -123,7 +128,8 @@ def test_the_init_template_is_a_valid_pack() -> None:
     TaskPack.parse(yaml.safe_load(_PACK_TEMPLATE))
 
 
-@pytest.mark.parametrize("skill", ["harness-field-pack", "harness-insights"])
+@pytest.mark.parametrize(
+    "skill", ["harness-lab", "harness-field-pack", "harness-insights"])
 def test_agent_skills_ship_inside_the_package(skill: str) -> None:
     """`harness init` reads these out of the wheel, not out of a checkout."""
     from importlib import resources
@@ -131,3 +137,24 @@ def test_agent_skills_ship_inside_the_package(skill: str) -> None:
     path = resources.files("harness") / "agent_skills" / skill / "SKILL.md"
     assert path.is_file()
     assert "name:" in path.read_text()
+
+
+def test_skills_do_not_cite_docs_that_are_not_shipped() -> None:
+    """A skill lands in a project that has the wheel, not this checkout.
+
+    Its doc pointers have to resolve there, so they may name only the five
+    guides under `docs/` — never a reference contract, which lives in the
+    gitignored `archive/` and reaches no customer.
+    """
+    from importlib import resources
+
+    shipped = {p.name for p in (ROOT / "docs").glob("*.md")}
+    root = resources.files("harness") / "agent_skills"
+    for skill in root.iterdir():
+        if not skill.is_dir():
+            continue
+        text = (skill / "SKILL.md").read_text()
+        for cited in re.findall(r"docs/([\w\-]+\.md)", text):
+            assert cited in shipped, (
+                f"{skill.name} cites docs/{cited}, which is not shipped")
+        assert "archive/" not in text, f"{skill.name} cites the internal archive"

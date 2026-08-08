@@ -4,7 +4,7 @@ Every metric carries a validation status, and every report prints it. Field
 reports ship before the controlled rig validates the gold-free metrics — that is
 acceptable *because it is stated on the artifact*, not because nobody notices.
 
-Contract: docs/reference/packaging-axes.md#metric-validation
+Contract: archive/reference/packaging-axes.md#metric-validation
 """
 
 from __future__ import annotations

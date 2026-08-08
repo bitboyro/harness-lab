@@ -16,7 +16,7 @@ The second is that turn 0 carries the packaging materials, which for an
 eager-all MCP arm is the entire tool surface. Those get summarised, not dumped —
 their *size* is the finding (it is a reported metric), their content is not.
 
-Contract: docs/reference/experiment-design.md#what-is-persisted
+Contract: archive/reference/experiment-design.md#what-is-persisted
 """
 
 from __future__ import annotations

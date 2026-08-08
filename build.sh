@@ -33,7 +33,10 @@ cp "$DIST"/harness_lab-*.whl "$BUNDLE/"
 cp install.py "$BUNDLE/"
 cp -r examples "$BUNDLE/"
 [ -d docs ] && cp -r docs "$BUNDLE/"
-for f in README.md CHANGELOG.md ROADMAP.md LICENSE; do
+# No ROADMAP and no reference/ contracts: both live under archive/, which is
+# gitignored and does not ship. `cp -r docs` is therefore already correct — it
+# copies only the five reader-facing guides.
+for f in README.md CHANGELOG.md LICENSE; do
     [ -f "$f" ] && cp "$f" "$BUNDLE/"
 done
 

@@ -121,8 +121,8 @@ wiring problem than a finding.
 
 ## Further
 
-- [reference/statistics.md](./reference/statistics.md) — the model, power/MDE,
-  the confirmatory split, and what comparing runs may claim
-- [reference/experiment-design.md](./reference/experiment-design.md#metrics) —
-  every metric's definition and source
-- `harness report DIR --glossary` — the same definitions, next to your numbers
+- `harness report DIR --glossary` — every metric's definition and its
+  validation status, printed next to your own numbers
+- `harness rig --cores N` — the power table for a matrix that size, so you can
+  see which contrasts it could resolve before you pay for it
+- `harness compare A B` — what differed in the setup, and what that changed

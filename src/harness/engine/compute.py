@@ -7,7 +7,7 @@ the controlled rig exists to validate.
 Every value is returned with its validation status attached, so a report cannot
 quietly present an unvalidated number as an established one.
 
-Contract: docs/reference/packaging-axes.md#metric-validation
+Contract: archive/reference/packaging-axes.md#metric-validation
 """
 
 from __future__ import annotations

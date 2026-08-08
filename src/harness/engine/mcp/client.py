@@ -14,7 +14,7 @@ shim: legacy pays a per-*session* handshake, 2026-07-28 pays a per-*call* tax
 that scales with call count. That penalises chatty arms and favours arms that
 batch inside a sandbox — which may move the A-vs-D ranking on its own.
 
-Contract: docs/reference/decisions.md F3
+Contract: archive/reference/decisions.md F3
 """
 
 from __future__ import annotations

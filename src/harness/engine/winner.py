@@ -24,7 +24,7 @@ them, and name an arm.
    minimum detectable effect. When it is not, the report says the arms are tied
    on accuracy and names what the score gap is actually made of.
 
-Contract: docs/reference/statistics.md, docs/reading-results.md
+Contract: archive/reference/statistics.md, docs/reading-results.md
 """
 
 from __future__ import annotations

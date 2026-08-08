@@ -10,7 +10,7 @@ only one is dangerous. The grader already produces a clean 2x2 over the
 answerable/unanswerable decision, and precision, recall and MCC read it
 directly.
 
-Contract: docs/reference/experiment-design.md#analysis
+Contract: archive/reference/experiment-design.md#analysis
 """
 
 from __future__ import annotations

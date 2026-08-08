@@ -2,7 +2,7 @@
 
 **Status:** Contract — frozen at P0, versioned thereafter
 **Schema version:** `1`
-**Decision:** [G3](./reference/decisions.md#g3--task-pack-schema-frozen-at-p0)
+**Decision:** G3
 
 A **task pack** is the portable unit that lets someone evaluate their own API with this harness. It is the interop contract: the engine consumes it, users author it, and everything downstream — grader, metrics, report classes — is shaped by it.
 
@@ -13,8 +13,8 @@ It is frozen before the engine is written, deliberately. A format that changes a
 ## 1. Design rules
 
 1. **Every field has exactly one defined consumer.** A field nothing reads is cut, not kept "for later". §3 is the audit.
-2. **Optional fields degrade gracefully.** A pack with only `api` and `tasks[].prompt` still runs — it yields gold-free metrics only (`assertion-free` mode, [O6](./reference/decisions.md#planmd-open-questions)). Every additional field unlocks a specific metric, and the report says which metrics were unavailable and why.
-3. **Nothing in the pack names a variant.** A pack describes *the API and the tasks*, never how to package them. Packaging is the independent variable and lives in the run plan ([`packaging-axes.md`](./reference/packaging-axes.md)).
+2. **Optional fields degrade gracefully.** A pack with only `api` and `tasks[].prompt` still runs — it yields gold-free metrics only (`assertion-free` mode, O6). Every additional field unlocks a specific metric, and the report says which metrics were unavailable and why.
+3. **Nothing in the pack names a variant.** A pack describes *the API and the tasks*, never how to package them. Packaging is the independent variable and lives in the run plan, selected with `--presets`.
 4. **Safety defaults are on.** Read-only unless writes are explicitly enabled; `forbidden_calls` enforced whenever present.
 
 ---
@@ -111,17 +111,17 @@ The freeze check. Every field, and the one thing that reads it. **A field with n
 | `pack.report_class` | Report layer | Refuses to pool controlled with field results |
 | `api.openapi` | T1 lint; material generators | Static scorecard; generated MCP defs / skills / docs |
 | `api.mcp.url` | `McpToolCallExecutor` | Live-MCP field targets |
-| `api.mcp.spec_revision` | MCP client selection; `CostBreakdown` | Correct transport; per-call vs. per-session cost accounting ([F3](./reference/decisions.md#f3--support-both-mcp-spec-revisions)) |
+| `api.mcp.spec_revision` | MCP client selection; `CostBreakdown` | Correct transport; per-call vs. per-session cost accounting (F3) |
 | `api.base_url_env` / `auth.*` | All executors | Reaching the target without inlining secrets |
-| `safety.writes_enabled` | Pack loader | Blocks mutation tasks by default ([O5](./reference/decisions.md#planmd-open-questions)) |
+| `safety.writes_enabled` | Pack loader | Blocks mutation tasks by default (O5) |
 | `safety.production_ack` | Pack loader | Second gate on production-looking write targets |
 | `safety.forbidden_calls` | Executor interceptor; harm metric | **Harm signal without a state differ** — the field-mode safety metric |
-| `isolation.mode` | Run scheduler | Instance-per-run parallelism ([G10](./reference/decisions.md#g10--instance-per-run-isolation)) |
+| `isolation.mode` | Run scheduler | Instance-per-run parallelism (G10) |
 | `isolation.setup` / `teardown` | Run scheduler | Per-run reseed |
 | `isolation.state_snapshot` | Grader | State-diff grading; destructive-write rate; harm per 100 tasks |
 | `tasks[].id` | Trace store; per-task metric join | Every metric is attributable to a task |
 | `tasks[].prompt` | Agent loop | The task |
-| `tasks[].core_id` | Matched-pair analysis; stats model | Write penalty, nav/action split; random intercept per core ([G8](./reference/decisions.md#g8--statistical-plan-written-with-the-rig)) |
+| `tasks[].core_id` | Matched-pair analysis; stats model | Write penalty, nav/action split; random intercept per core (G8) |
 | `tasks[].class` | Stratified reporting; write gate | RQ4 (ranking reversal between read and write) |
 | `tasks[].answerable` | Grader | False-positive answering rate |
 | `tasks[].harm_tier` | Harm metric | Weights harm per 100 tasks |
@@ -215,7 +215,7 @@ tasks:
 
 ## 5. Worked example B — a real API, read-only (secondary)
 
-A field pack against the workspace's `eu-regulations` MCP server. **Secondary to the mock API**: it exists to prove the schema survives contact with a surface we did not design, and to give field mode a first target ([N1](./reference/decisions.md#still-open)).
+A field pack against the workspace's `eu-regulations` MCP server. **Secondary to the mock API**: it exists to prove the schema survives contact with a surface we did not design, and to give field mode a first target (N1).
 
 Tool names and parameters below are **checked against the live `tools/list`** (2026-08-05).
 
@@ -293,7 +293,7 @@ tasks:
     harm_tier: 0
 ```
 
-**What this pack yields:** all gold-free metrics (tagged `unvalidated` until the rig validates them), selection accuracy on the three tasks with a `gold_call_sequence`, false-positive answering from `nonexistent-regulation`, and Z0/Z1 lift over the parametric baseline ([G9](./reference/decisions.md#g9--z0z1-in-field-mode-as-a-parametric-baseline)). No harm metrics — read-only, no state differ. The report says exactly that.
+**What this pack yields:** all gold-free metrics (tagged `unvalidated` until the rig validates them), selection accuracy on the three tasks with a `gold_call_sequence`, false-positive answering from `nonexistent-regulation`, and Z0/Z1 lift over the parametric baseline (G9). No harm metrics — read-only, no state differ. The report says exactly that.
 
 **Three things the live schemas changed**, recorded because they are the kind of thing a hand-written pack gets wrong:
 
