@@ -51,16 +51,11 @@ python3 install.py --download            # latest release
 python3 install.py --tag=v0.1.0          # a specific one
 ```
 
-This needs the [GitHub CLI](https://cli.github.com), logged in:
-
-```bash
-gh auth login
-```
-
-`gh` is required rather than convenient. The repo is private, so the download
-is authenticated either way, and delegating to `gh` means this script never
-touches a token — a token passed as an argument is readable by every other
-process on the machine, and tends to survive in shell history and CI logs.
+No credentials, no `gh`, no extra tooling — it reads the public releases API
+and writes the wheel to a temp directory. If it reports a 403, that is the
+anonymous rate limit (60 requests an hour per IP); wait, or take the release
+zip from the [releases page](https://github.com/bitboyro/harness-lab/releases)
+by hand.
 
 ## From a wheel directly
 

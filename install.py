@@ -9,15 +9,15 @@
 
 Two ways to get the wheel, because there are two kinds of person running this.
 Someone handed the release zip has the wheel already, next to this script, and
-should not need credentials or a network to install it. Someone working from
-the repo would rather not build first — `--download` pulls the latest release
-for them.
+should not need a network to install it. Someone who found the project on
+GitHub would rather not clone and build — `--download` fetches the latest
+release for them.
 
-`--download` needs the `gh` CLI, authenticated. That is not a convenience: the
-repo is private, so the download is authenticated no matter what, and letting
-`gh` hold the token means this script never handles one. A token in an argv
-string is readable by every process on the machine and tends to end up in shell
-history and CI logs, which is how the shell installer this replaced leaked.
+`--download` is anonymous: the repo is public, so there is no token to handle
+and none is accepted. That is worth stating rather than assuming, because the
+shell installer this replaced took a `GITHUB_TOKEN` and put it in a URL, where
+every process on the machine can read it out of the process list and where it
+survives in shell history. Nothing here reads a credential.
 
 Written in deliberately old Python syntax and importing nothing outside the
 standard library, because the most common reason this fails is that the
@@ -29,14 +29,21 @@ user to upgrade.
 from __future__ import print_function
 
 import glob
+import json
 import os
 import subprocess
 import sys
 import tempfile
 
+try:
+    from urllib.request import urlopen
+except ImportError:  # pragma: no cover - Python 2 reaches this and then dies
+    urlopen = None
+
 MINIMUM = (3, 11)
 PACKAGE = "harness-lab"
 REPO = "bitboyro/harness-lab"
+API = "https://api.github.com/repos/%s/releases" % REPO
 
 
 def say(msg=""):
@@ -93,63 +100,76 @@ def find_wheel(argv_path):
             return found[-1], None
     return None, ("no harness_lab-*.whl found next to this script or in "
                   "./dist.\n"
-                  "       Either:  python3 %s --download   (needs `gh`, "
-                  "authenticated)\n"
+                  "       Either:  python3 %s --download   (fetches the latest "
+                  "release)\n"
                   "       or pass one as an argument, or run ./build.sh first."
                   % os.path.basename(__file__))
 
 
-def _have(program):
-    for directory in os.environ.get("PATH", "").split(os.pathsep):
-        if os.path.isfile(os.path.join(directory, program)):
-            return True
-    return False
+def _get(url):
+    """Read a public URL. Returns (bytes, problem).
+
+    Certificate verification is urlopen's default and stays that way — an
+    installer is the last place to accept an unverified download.
+    """
+    if urlopen is None:
+        return None, "this Python has no urllib.request, which should be impossible"
+    try:
+        handle = urlopen(url, timeout=30)
+        try:
+            return handle.read(), None
+        finally:
+            handle.close()
+    except Exception as exc:  # noqa: BLE001 - every failure gets the same advice
+        return None, "%s: %s" % (url, exc)
 
 
 def download_wheel(tag):
-    """Fetch a release wheel with `gh`, which already holds the credentials.
+    """Fetch a release wheel from GitHub, anonymously.
 
     Returns (path, problem). The wheel lands in a temp directory we do not
     clean up: pip has already read it by the time we are done, and leaving it
     means a failed install can be retried without a second download.
     """
-    if not _have("gh"):
+    url = "%s/tags/%s" % (API, tag) if tag else "%s/latest" % API
+    say("\n==> GET %s" % url)
+    raw, problem = _get(url)
+    if problem:
         return None, (
-            "--download needs the GitHub CLI, and `gh` is not on PATH.\n"
-            "       macOS:   brew install gh\n"
-            "       Debian:  sudo apt install gh\n"
-            "       others:  https://cli.github.com\n"
-            "       Then:    gh auth login\n"
-            "       Or install from a release zip, which needs neither.")
+            "could not reach the GitHub releases API.\n"
+            "       %s\n"
+            "       If this is a 404, no release has been published yet — "
+            "build one:  ./build.sh\n"
+            "       If it is a 403, that is the anonymous rate limit; wait, or "
+            "download\n"
+            "       the release zip from "
+            "https://github.com/%s/releases by hand." % (problem, REPO))
 
-    status = subprocess.call(["gh", "auth", "status"],
-                             stdout=_devnull(), stderr=subprocess.STDOUT)
-    if status != 0:
-        return None, ("`gh` is installed but not logged in. Run:  gh auth login\n"
-                      "       %s is private, so the download is authenticated."
-                      % REPO)
+    try:
+        assets = json.loads(raw.decode("utf-8")).get("assets") or []
+    except ValueError as exc:
+        return None, "the releases API returned something that is not JSON: %s" % exc
 
-    target = tempfile.mkdtemp(prefix="harness-lab-")
-    cmd = ["gh", "release", "download"]
-    if tag:
-        cmd.append(tag)
-    cmd += ["--repo", REPO, "--pattern", "harness_lab-*.whl", "--dir", target]
-    say("\n==> %s" % " ".join(cmd))
-    if subprocess.call(cmd) != 0:
-        return None, (
-            "gh could not download a release wheel (see its output above).\n"
-            "       If this says 'release not found', none has been published "
-            "yet —\n"
-            "       build one locally instead:  ./build.sh")
+    wheels = [a for a in assets
+              if a.get("name", "").startswith("harness_lab-")
+              and a.get("name", "").endswith(".whl")]
+    if not wheels:
+        return None, ("that release has no harness_lab-*.whl attached.\n"
+                      "       See https://github.com/%s/releases" % REPO)
 
-    found = sorted(glob.glob(os.path.join(target, "harness_lab-*.whl")))
-    if not found:
-        return None, "the release contains no harness_lab-*.whl"
-    return found[-1], None
+    asset = wheels[-1]
+    target = os.path.join(tempfile.mkdtemp(prefix="harness-lab-"), asset["name"])
+    say("==> %s (%s bytes)" % (asset["name"], asset.get("size", "?")))
+    body, problem = _get(asset["browser_download_url"])
+    if problem:
+        return None, "could not download the wheel: %s" % problem
 
-
-def _devnull():
-    return open(os.devnull, "w")
+    handle = open(target, "wb")
+    try:
+        handle.write(body)
+    finally:
+        handle.close()
+    return target, None
 
 
 def _flag_value(flags, name):

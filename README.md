@@ -132,8 +132,7 @@ harness doctor                 # same checks, any time after
 ```
 
 Working from the repo instead, `python3 install.py --download` pulls the latest
-release wheel — that one needs [`gh`](https://cli.github.com) logged in, since
-the repo is private.
+release wheel straight from GitHub. No credentials and no extra tooling.
 
 Two ways to run it and no third — `harness …` or `python3 -m harness …`.
 
