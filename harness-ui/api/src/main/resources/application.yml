@@ -1,0 +1,26 @@
+server:
+  address: 127.0.0.1
+  port: 8085
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: 32MB
+      max-request-size: 32MB
+  web:
+    resources:
+      static-locations: classpath:/static/
+      add-mappings: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+harness:
+  data: /data
+  cli: harness
+  adapter: python3
+  adapter-script: /app/adapter/harness_json.py
+  expect-version: "0.0.1"

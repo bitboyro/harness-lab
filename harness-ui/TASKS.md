@@ -21,15 +21,15 @@ Rules:
 | T1.3 | `harness_json.py lint` | S1 | T0.2 | `adapter/` | Runs on `examples/openapi.json` | done | s1 |
 | T1.4 | `harness_json.py pack-validate` | S1 | T0.2 | `adapter/` | Good + bad pack both handled | done | s1 |
 | T1.5 | Version assertion + contract tests | S1 | T1.1–T1.4 | `adapter/tests/` | Fails loudly on wrong version | done | s1 |
-| T2.1 | Maven module, config, loopback bind | S2 | T0.3 | `api/` | `mvnw verify` green | todo | |
-| T2.2 | `HarnessCli` subprocess + exit-code mapping | S2 | T0.1 | `api/core/` | All 6 exit codes mapped | todo | |
-| T2.3 | Targets: upload contract, list | S2 | T2.2 | `api/` | `curl -F file=@examples/openapi.json` | todo | |
-| T2.4 | Lint + pack endpoints (draft/read/write/validate) | S2 | T2.2 | `api/` | Typo returns Python `PackError` text | todo | |
-| T2.5 | Runs: projection, approval, spawn, JobRegistry | S2 | T2.2 | `api/core/` | Dry-run spends nothing | todo | |
-| T2.6 | Progress polling + terminal detection | S2 | T2.5 | `api/` | Torn last line survived | todo | |
-| T2.7 | Artifacts: render-on-demand, sandbox CSP, traversal guard | S2 | T2.2 | `api/` | `../../etc/passwd` rejected | todo | |
-| T2.8 | Compare endpoint incl. exit-3 refusal payload | S2 | T2.2 | `api/` | Cross-model pair refuses | todo | |
-| T2.9 | SPA fallback controller | S2 | T2.1 | `api/web/` | Deep link survives refresh | todo | |
+| T2.1 | Maven module, config, loopback bind | S2 | T0.3 | `api/` | `mvnw verify` green | done | s2 |
+| T2.2 | `HarnessCli` subprocess + exit-code mapping | S2 | T0.1 | `api/core/` | All 6 exit codes mapped | done | s2 |
+| T2.3 | Targets: upload contract, list | S2 | T2.2 | `api/` | `curl -F file=@examples/openapi.json` | done | s2 |
+| T2.4 | Lint + pack endpoints (draft/read/write/validate) | S2 | T2.2 | `api/` | Typo returns Python `PackError` text | done | s2 |
+| T2.5 | Runs: projection, approval, spawn, JobRegistry | S2 | T2.2 | `api/core/` | Dry-run spends nothing | done | s2 |
+| T2.6 | Progress polling + terminal detection | S2 | T2.5 | `api/` | Torn last line survived | done | s2 |
+| T2.7 | Artifacts: render-on-demand, sandbox CSP, traversal guard | S2 | T2.2 | `api/` | `../../etc/passwd` rejected | done | s2 |
+| T2.8 | Compare endpoint incl. exit-3 refusal payload | S2 | T2.2 | `api/` | Cross-model pair refuses | done | s2 |
+| T2.9 | SPA fallback controller | S2 | T2.1 | `api/web/` | Deep link survives refresh | done | s2 |
 | T3.1 | Next app, static export, Tailwind, API client | S3 | T0.1 | `web/` | `npm run build` → `out/` | done | s3 |
 | T3.2 | Targets + Lint pages | S3 | T3.1 | `web/` | Against stub API | done | s3 |
 | T3.3 | Pack editor with live validation | S3 | T3.1 | `web/` | Bad pack shows Python message | done | s3 |
