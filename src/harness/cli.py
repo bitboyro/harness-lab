@@ -482,17 +482,25 @@ def _stream_watcher(concurrency: int):
     interleave, and two half-written turns spliced together are less readable
     than no transcript at all. The lock is held only for the write, so a slow
     terminal cannot stall a provider call.
+
+    Uses the showcase style: MCP envelopes unwrapped, arguments as key/value
+    lines, preamble collapsed, FINAL ANSWER highlighted — the plain style is
+    what ``harness transcript`` keeps for machine-stable replay.
     """
     import threading
 
-    from .engine.transcript import render_turn
+    from .engine.transcript import render_turn, stream_run_banner
 
     lock = threading.Lock()
+    seen: set[str] = set()
 
     def watch(trace, index: int) -> None:
-        text = render_turn(trace, index)
+        text = render_turn(trace, index, style="showcase")
         with lock:
-            print(f"\n[{trace.run_id}] {text}", flush=True)
+            if trace.run_id not in seen:
+                seen.add(trace.run_id)
+                print(f"\n{stream_run_banner(trace)}", flush=True)
+            print(text, flush=True)
 
     if concurrency > 1:
         print(f"note: --stream at --concurrency {concurrency}; turns from "
@@ -968,13 +976,14 @@ def cmd_transcript(args: argparse.Namespace) -> int:
     """Replay one stored run: every message, every call, every result."""
     from .engine.transcript import load, render_stored
 
+    style = "showcase" if args.pretty else "plain"
     paths = (sorted(args.trace.glob("*.json*")) if args.trace.is_dir()
              else [args.trace])
     if not paths:
         print(f"no traces in {args.trace}")
         return 1
     for path in paths[:args.limit]:
-        print(render_stored(load(str(path))))
+        print(render_stored(load(str(path)), style=style))
         print()
     if len(paths) > args.limit:
         print(f"({len(paths) - args.limit} more — raise --limit, or name one file)")
@@ -1250,7 +1259,9 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--smoke", action="store_true",
                        help="~12 runs, ~1 min, ~$0.05: proves the pipeline works")
     run_p.add_argument("--stream", action="store_true",
-                       help="print every message to and from the model as it happens")
+                       help="print each turn live in a readable showcase "
+                            "layout (unwrap MCP payloads, highlight answers). "
+                            "Pair with --concurrency 1 to keep runs in order")
     run_p.add_argument("--pack", type=Path,
                        help="run against a live target described by this task "
                             "pack instead of the controlled rig")
@@ -1353,6 +1364,9 @@ def build_parser() -> argparse.ArgumentParser:
                       help="a trace .json, or a traces/ directory")
     tr_p.add_argument("--limit", type=int, default=1,
                       help="how many traces to render from a directory")
+    tr_p.add_argument("--pretty", action="store_true",
+                      help="showcase layout (same as live --stream): unwrap "
+                           "MCP envelopes, key/value args, highlight answers")
     tr_p.set_defaults(func=cmd_transcript)
 
     plan_p = sub.add_parser("plan", help="cost projection and approval")

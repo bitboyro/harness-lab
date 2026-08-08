@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from conftest import BASE_AXES
 
 from harness.engine.axes import preset
@@ -89,6 +91,59 @@ def test_a_blocked_call_is_marked_as_harm() -> None:
     t.record_call(_call(0, "delete_everything", forbidden=True))
     out = render_turn(t, 0)
     assert "harm" in out and "BLOCKED" in out
+
+
+def test_showcase_unwraps_mcp_envelope_and_lists_items() -> None:
+    """Live --stream must not dump the MCP wrapper the agent already peeled."""
+    body = {
+        "isError": False,
+        "status": 200,
+        "content": [{
+            "type": "text",
+            "text": json.dumps({
+                "items": [
+                    {"id": "ep_1", "title": "A", "runtime_seconds": 10},
+                    {"id": "ep_2", "title": "B", "runtime_seconds": 99},
+                ],
+                "total": 2,
+            }),
+        }],
+        "structuredContent": {
+            "items": [
+                {"id": "ep_1", "title": "A", "runtime_seconds": 10},
+                {"id": "ep_2", "title": "B", "runtime_seconds": 99},
+            ],
+            "total": 2,
+        },
+    }
+    t = _trace()
+    t.record_turn(_turn(0, [
+        {"role": "system", "content": "Answer the task using the tools available."},
+        {"role": "user", "content": "How long is the longest episode?"},
+    ]))
+    t.record_call(CallRecord(
+        turn=0,
+        call=Call(tool="list_episodes", args={"season_id": "sn_1", "limit": 100}),
+        result=Result(200, body, 3.0),
+        started_at=0.0,
+    ))
+    out = render_turn(t, 0, style="showcase")
+    assert "isError" not in out
+    assert "structuredContent" not in out
+    assert "list_episodes" in out
+    assert "season_id" in out and "sn_1" in out
+    assert "2 items" in out
+    assert "ep_2" in out and "runtime_seconds=99" in out
+    assert "task preamble" in out
+    assert "How long is the longest episode?" in out
+
+
+def test_showcase_highlights_final_answer() -> None:
+    t = _trace()
+    t.record_turn(_turn(0, [{"role": "user", "content": "q"}],
+                         text="thinking…\nFINAL ANSWER: 3466 seconds"))
+    out = render_turn(t, 0, style="showcase")
+    assert "★ FINAL ANSWER: 3466 seconds" in out
 
 
 # ---- outcomes --------------------------------------------------------------
