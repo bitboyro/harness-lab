@@ -870,8 +870,8 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     The skills are the interface for most users: they are what lets somebody's
     own coding agent drive lint/scaffold/run without them reading a manual.
-    Shipping them inside the wheel is what makes that true for a user who never
-    cloned the repo — which, for a private repo, is every customer.
+    Shipping them inside the wheel is what makes that true for someone who
+    installed from a release and never cloned anything.
     """
     import shutil
     from importlib import resources

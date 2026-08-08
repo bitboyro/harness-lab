@@ -7,6 +7,7 @@ work when nothing works: no provider stack, no network, no key.
 from __future__ import annotations
 
 import ast
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -125,35 +126,107 @@ def test_installer_imports_only_the_standard_library() -> None:
         for node in ast.walk(tree)
         if isinstance(node, ast.Import) for alias in node.names
     }
-    assert roots <= {"glob", "os", "subprocess", "sys", "tempfile", "pip"}
+    assert roots <= {"glob", "json", "os", "subprocess", "sys", "tempfile", "pip"}
 
 
 def test_installer_never_handles_a_token() -> None:
-    """The private-repo download is delegated to `gh` for exactly this reason.
+    """The repo is public, so the download is anonymous and takes no credential.
 
     The shell installer this replaced put a GITHUB_TOKEN in a URL, where every
     process on the machine can read it out of the process list. Nothing here
-    should read a token, embed one, or accept one as an argument.
+    should read a token, embed one, or accept one as an argument — and if the
+    repo ever goes private, this test is the reminder to add auth deliberately
+    rather than by pasting a token into the URL again.
     """
-    source = (ROOT / "install.py").read_text()
+    tree = ast.parse((ROOT / "install.py").read_text())
+
+    # Docstrings are exempt: this file *explains* why it takes no token, and a
+    # check that forbids naming the thing would forbid documenting the rule.
+    docstrings = {
+        id(node.body[0].value)
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.ClassDef))
+        and node.body and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+        and isinstance(node.body[0].value.value, str)
+    }
+    literals = [
+        node.value for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        and id(node) not in docstrings
+    ]
     for secret in ("GITHUB_TOKEN", "GH_TOKEN", "Authorization", "--token"):
-        assert secret not in source, f"install.py handles {secret} itself"
+        assert not any(secret in text for text in literals), \
+            f"install.py handles {secret} in code"
+
+    # The only environment variable it may read is PATH.
+    env_reads = {
+        node.slice.value for node in ast.walk(tree)
+        if isinstance(node, ast.Subscript)
+        and isinstance(node.slice, ast.Constant)
+        and isinstance(node.value, ast.Attribute)
+        and node.value.attr == "environ"
+    } | {
+        node.args[0].value for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "get" and isinstance(node.func.value, ast.Attribute)
+        and node.func.value.attr == "environ" and node.args
+        and isinstance(node.args[0], ast.Constant)
+    }
+    assert env_reads <= {"PATH"}, f"install.py reads {env_reads - {'PATH'}}"
 
 
-def test_installer_download_explains_a_missing_gh(monkeypatch) -> None:
-    """The failure has to name the fix, and the offline alternative."""
+def _installer():
     import importlib.util
 
     spec = importlib.util.spec_from_file_location("_installer", ROOT / "install.py")
-    installer = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(installer)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
-    monkeypatch.setenv("PATH", "")
+
+def test_installer_downloads_the_wheel_asset(monkeypatch, tmp_path) -> None:
+    """Picks the wheel out of a release, and writes exactly those bytes."""
+    installer = _installer()
+    payload = json.dumps({"assets": [
+        {"name": "harness-lab-0.1.0.zip", "size": 9,
+         "browser_download_url": "https://example.invalid/bundle.zip"},
+        {"name": "harness_lab-0.1.0-py3-none-any.whl", "size": 5,
+         "browser_download_url": "https://example.invalid/w.whl"},
+    ]}).encode()
+
+    seen = []
+
+    def fake_get(url):
+        seen.append(url)
+        return (payload if "api.github.com" in url else b"WHEEL"), None
+
+    monkeypatch.setattr(installer, "_get", fake_get)
+    path, problem = installer.download_wheel(None)
+
+    assert problem is None
+    assert path.endswith("harness_lab-0.1.0-py3-none-any.whl")
+    assert Path(path).read_bytes() == b"WHEEL"
+    # The zip asset must not be mistaken for the wheel.
+    assert seen[1] == "https://example.invalid/w.whl"
+
+
+def test_installer_download_honours_a_tag(monkeypatch) -> None:
+    installer = _installer()
+    seen = []
+    monkeypatch.setattr(installer, "_get",
+                        lambda url: (seen.append(url), (b"{}", None))[1])
+    installer.download_wheel("v0.1.0")
+    assert seen[0].endswith("/releases/tags/v0.1.0")
+
+
+def test_installer_download_failure_names_the_way_out(monkeypatch) -> None:
+    """A 404 here means no release exists, which is not obvious from the error."""
+    installer = _installer()
+    monkeypatch.setattr(installer, "_get", lambda url: (None, "HTTP Error 404"))
     wheel, problem = installer.download_wheel(None)
     assert wheel is None
-    assert "gh" in problem and "cli.github.com" in problem
-    # Someone with a release zip must not be told to go install tooling.
-    assert "release zip" in problem
+    assert "./build.sh" in problem and "rate limit" in problem
 
 
 def test_installer_reports_before_it_installs() -> None:
