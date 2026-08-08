@@ -8,7 +8,7 @@ them.
 The load-time rules below are the reason this module exists. They are not
 defensive coding; each one blocks a specific way of producing a wrong number.
 
-Contract: docs/task-packs.md
+Contract: docs/design-your-test-run.md
 """
 
 from __future__ import annotations

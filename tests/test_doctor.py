@@ -125,7 +125,35 @@ def test_installer_imports_only_the_standard_library() -> None:
         for node in ast.walk(tree)
         if isinstance(node, ast.Import) for alias in node.names
     }
-    assert roots <= {"glob", "os", "subprocess", "sys", "pip"}
+    assert roots <= {"glob", "os", "subprocess", "sys", "tempfile", "pip"}
+
+
+def test_installer_never_handles_a_token() -> None:
+    """The private-repo download is delegated to `gh` for exactly this reason.
+
+    The shell installer this replaced put a GITHUB_TOKEN in a URL, where every
+    process on the machine can read it out of the process list. Nothing here
+    should read a token, embed one, or accept one as an argument.
+    """
+    source = (ROOT / "install.py").read_text()
+    for secret in ("GITHUB_TOKEN", "GH_TOKEN", "Authorization", "--token"):
+        assert secret not in source, f"install.py handles {secret} itself"
+
+
+def test_installer_download_explains_a_missing_gh(monkeypatch) -> None:
+    """The failure has to name the fix, and the offline alternative."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_installer", ROOT / "install.py")
+    installer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(installer)
+
+    monkeypatch.setenv("PATH", "")
+    wheel, problem = installer.download_wheel(None)
+    assert wheel is None
+    assert "gh" in problem and "cli.github.com" in problem
+    # Someone with a release zip must not be told to go install tooling.
+    assert "release zip" in problem
 
 
 def test_installer_reports_before_it_installs() -> None:

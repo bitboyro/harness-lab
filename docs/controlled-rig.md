@@ -5,7 +5,7 @@ from a seed, together with an answer key from the same source of truth — so
 correctness and harm are gradeable here in a way they never are on a real API.
 
 This is the mode that produces research claims. For your own API, see
-[your-api.md](./your-api.md).
+[test-your-api-harness.md](./test-your-api-harness.md).
 
 ## The smoke run
 

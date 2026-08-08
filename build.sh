@@ -33,6 +33,14 @@ cp "$DIST"/harness_lab-*.whl "$BUNDLE/"
 cp install.py "$BUNDLE/"
 cp -r examples "$BUNDLE/"
 [ -d docs ] && cp -r docs "$BUNDLE/"
+
+# A real result, at the same path the docs use, so `harness report
+# results/auth-smoke` is copy-pasteable for someone who has installed nothing
+# else and spent nothing. 464 KB, and it is the only honest way to show what
+# the output looks like without shipping a screenshot that renderer changes
+# would silently falsify.
+mkdir -p "$BUNDLE/results"
+cp -r results/auth-smoke "$BUNDLE/results/"
 # No ROADMAP and no reference/ contracts: both live under archive/, which is
 # gitignored and does not ship. `cp -r docs` is therefore already correct — it
 # copies only the five reader-facing guides.
@@ -52,6 +60,11 @@ Then either form works, and there is no third:
 
   harness lint --demo
   python3 -m harness lint --demo
+
+See what a finished run looks like, without spending anything:
+
+  harness report results/auth-smoke
+  harness transcript results/auth-smoke/traces
 
 Point it at your own API:
 

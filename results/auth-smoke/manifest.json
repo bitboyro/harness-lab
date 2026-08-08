@@ -1,0 +1,22 @@
+{
+  "created_at": "2026-08-06T17:11:07.322662+00:00",
+  "id": "auth-smoke",
+  "model": "gpt-5.6-luna",
+  "provider": "openai",
+  "presets": [
+    "B1-auth",
+    "B2-auth",
+    "D2-auth"
+  ],
+  "cores": 1,
+  "repeats": 1,
+  "seed": 1,
+  "surface_size": 0,
+  "fan_out": 4,
+  "reasoning_effort": "low",
+  "difficulty": "hard",
+  "report_class": "controlled",
+  "tasks": 3,
+  "planned": 9,
+  "resumed": 0
+}

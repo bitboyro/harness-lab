@@ -54,7 +54,7 @@ What a good task looks like:
 - **Aim for ≥20 distinct cores** to rank arms; ~40 for contrasts you intend to
   publish. Power comes from more tasks, not more repeats of the same one.
 
-Full field reference: [task-packs.md](./task-packs.md).
+Full field reference: [design-your-test-run.md](./design-your-test-run.md).
 
 Your coding agent can do this with you — `harness init --agent claude|cursor|both`
 installs skills that know the whole workflow.

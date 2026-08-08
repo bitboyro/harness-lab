@@ -69,6 +69,16 @@ skills that know this whole workflow, so your agent can do it with you.
 
 ## Watch it work
 
+A real 9-run result ships with the tool, so there is something to open before
+you spend anything:
+
+```bash
+harness report results/auth-smoke            # the scorecard, the winner, the ties
+harness transcript results/auth-smoke/traces # what the agent actually did
+```
+
+And during a run of your own:
+
 ```bash
 harness run … --stream --concurrency 1     # every message, live
 harness transcript results/…/traces        # replay any run afterwards
@@ -111,11 +121,19 @@ Both run through one command and one execution path. The difference is a
 
 ## Install
 
+Download one thing — `harness-lab-<version>.zip` — and unzip it. The wheel and
+the installer are both inside, so nothing is fetched and no credentials are
+needed:
+
 ```bash
 python3 install.py --check     # what is missing, and what each thing blocks
-python3 install.py             # installs the wheel beside it
+python3 install.py             # installs the wheel next to it
 harness doctor                 # same checks, any time after
 ```
+
+Working from the repo instead, `python3 install.py --download` pulls the latest
+release wheel — that one needs [`gh`](https://cli.github.com) logged in, since
+the repo is private.
 
 Two ways to run it and no third — `harness …` or `python3 -m harness …`.
 
@@ -131,8 +149,8 @@ about the sandbox arms, in [docs/install.md](./docs/install.md).
 | | |
 |---|---|
 | [install.md](./docs/install.md) | Getting it running |
-| [your-api.md](./docs/your-api.md) | Testing your own API |
-| [task-packs.md](./docs/task-packs.md) | Writing tasks — the pack format |
+| [test-your-api-harness.md](./docs/test-your-api-harness.md) | Testing your own API |
+| [design-your-test-run.md](./docs/design-your-test-run.md) | Deciding what the run measures — the task pack format |
 | [controlled-rig.md](./docs/controlled-rig.md) | The built-in experiment |
 | [reading-results.md](./docs/reading-results.md) | What the numbers mean |
 

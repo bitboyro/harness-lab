@@ -1,5 +1,10 @@
 # Install
 
+There is one thing to download, not two. The release zip contains the wheel and
+the installer together, so `install.py` never has to fetch anything and never
+needs credentials. If you would rather pull the wheel from GitHub, `--download`
+does that — see [From a GitHub release](#from-a-github-release).
+
 ## From the bundle
 
 You have `harness-lab-<version>.zip`. Unzip it and run the installer, which
@@ -9,6 +14,10 @@ checks the machine before it changes anything:
 python3 install.py --check     # report only: what is missing, and what it blocks
 python3 install.py             # install the wheel sitting next to it
 ```
+
+The wheel is already inside the zip, next to `install.py` — that is what
+"beside it" means. Nothing is downloaded, so this works offline and on a
+machine with no GitHub access.
 
 `install.py` runs on **any** Python 3 — including one too old to run harness —
 so an old interpreter gets an explanation rather than a `SyntaxError`:
@@ -32,6 +41,26 @@ Or onto the user site, if a virtualenv is not an option:
 ```bash
 python3 install.py --user
 ```
+
+## From a GitHub release
+
+If you have the repo but not a bundle, skip the build:
+
+```bash
+python3 install.py --download            # latest release
+python3 install.py --tag=v0.1.0          # a specific one
+```
+
+This needs the [GitHub CLI](https://cli.github.com), logged in:
+
+```bash
+gh auth login
+```
+
+`gh` is required rather than convenient. The repo is private, so the download
+is authenticated either way, and delegating to `gh` means this script never
+touches a token — a token passed as an argument is readable by every other
+process on the machine, and tends to survive in shell history and CI logs.
 
 ## From a wheel directly
 
@@ -117,5 +146,5 @@ over two cores cannot resolve any contrast.
 
 ---
 
-Next: [your-api.md](./your-api.md) to test your own API, or
+Next: [test-your-api-harness.md](./test-your-api-harness.md) to test your own API, or
 [controlled-rig.md](./controlled-rig.md) for the built-in experiment.
