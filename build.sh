@@ -45,7 +45,7 @@ cp "$DIST/harness-$VERSION.pyz" "$BUNDLE/harness.pyz"
 cp -r examples "$BUNDLE/"
 [ -d docs ] && cp -r docs "$BUNDLE/"
 for f in README.md CHANGELOG.md LICENSE; do [ -f "$f" ] && cp "$f" "$BUNDLE/"; done
-cp -r src/harness/agent_skills "$BUNDLE/skills"
+cp -r src/harness/agent_skills "$BUNDLE/agent-skills"
 cat > "$BUNDLE/START-HERE.txt" <<EOF
 harness-lab $VERSION
 

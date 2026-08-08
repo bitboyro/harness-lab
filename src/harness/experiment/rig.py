@@ -13,6 +13,7 @@ world is milliseconds, so there is no reason to economise here.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from harness.engine.axes import (
@@ -24,6 +25,7 @@ from harness.engine.executors import (
 from harness.engine.generate import ApiSpec, load_spec
 from harness.engine.mcp import McpClient
 from harness.engine.methods import (
+    register_skill_root as _register_skill_root,
     CodeFsMcp, DocsShell, EagerAllMcp, GoldPreExecuted, MetaToolsMcp, NoTools,
     RetrievalMcp,
 )
@@ -33,6 +35,12 @@ from .http import CatalogServer
 from .mcp_surface import McpSurface, transport_for
 from .openapi import build_spec
 from .server import CatalogApi
+
+# The rig's own authored skill (the V9 pre-registration for the `-auth` arms)
+# ships inside this package, beside the world it describes. Registered rather
+# than hardcoded in the engine: `skills/` at a user's cwd is *their* convention
+# for *their* API, and the engine has no business knowing this package exists.
+_register_skill_root(Path(__file__).resolve().parent)
 
 #: Which packaging method serves each preset.
 METHOD_FOR_PRESET = {

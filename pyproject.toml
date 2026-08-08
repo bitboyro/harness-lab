@@ -33,7 +33,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 harness = [
     "agent_skills/**/*",
-    "skills/*.md",
+    "experiment/skills/*.md",
     "examples/*",
 ]
 
