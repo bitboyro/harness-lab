@@ -247,7 +247,7 @@ def analyse(report: Report, *, extra: Sequence[tuple[str, str]] = ()) -> StatsRe
 # decided after both have been seen, so there is no family size to correct
 # against. `CrossContrast` deliberately has no `significant` property.
 #
-# Contract: docs/statistical-plan.md §6
+# Contract: docs/reference/statistics.md#comparing-runs
 
 #: Manifest keys that together determine which tasks a run was given. All four
 #: are needed: `build_pack(build_world(seed, shape), cores=…, difficulty=…)`
@@ -269,7 +269,7 @@ def world_key(report: Report) -> tuple | None:
     assumed equal, so an old ledger falls back to the unpaired comparison
     rather than borrowing confidence it never earned.
 
-    Contract: docs/statistical-plan.md §6
+    Contract: docs/reference/statistics.md#comparing-runs
     """
     manifest = report.manifest
     digest = manifest.get("pack_digest")

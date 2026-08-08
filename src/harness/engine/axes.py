@@ -4,7 +4,7 @@ The axis assignment is the primitive; a preset is shorthand for a complete
 assignment. Nothing is defaulted implicitly — a variant with an unset axis is a
 config error, not a variant.
 
-Contract: docs/packaging-method.md
+Contract: docs/reference/packaging-axes.md
 """
 
 from __future__ import annotations

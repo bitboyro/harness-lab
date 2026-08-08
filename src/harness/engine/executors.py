@@ -9,7 +9,7 @@ in-memory, there are no real credentials, and there is no network egress, so
 container isolation would buy nothing. Field mode against real targets is where
 containers earn their cost (D3).
 
-Contract: docs/packaging-method.md §3
+Contract: docs/reference/packaging-axes.md#plugin-interface
 """
 
 from __future__ import annotations
