@@ -1,33 +1,44 @@
 # Install
 
-Three ways in, depending on whether you want to run it, keep it, or work on it.
+## From the bundle
 
-## The single file
-
-No install, no virtualenv. Download `harness-<version>-<platform>.pyz` from a
-release and run it:
+You have `harness-lab-<version>.zip`. Unzip it and run the installer, which
+checks the machine before it changes anything:
 
 ```bash
-python3 harness.pyz --version
-python3 harness.pyz lint --demo
+python3 install.py --check     # report only: what is missing, and what it blocks
+python3 install.py             # install the wheel sitting next to it
 ```
 
-The `.pyz` is platform-specific — it carries compiled wheels, so take the one
-matching your machine. First run unpacks to `~/.shiv`; later runs are instant.
+`install.py` runs on **any** Python 3 — including one too old to run harness —
+so an old interpreter gets an explanation rather than a `SyntaxError`:
 
-## As a tool on your PATH
-
-```bash
-curl -fsSL <raw-url>/install.sh | sh
+```
+[MISS] python    3.9.6 at /usr/bin/python3
+       needs 3.11 or newer
+  macOS:    brew install python@3.12
+  Debian:   sudo apt install python3.12 python3.12-venv
 ```
 
-Installs [uv](https://docs.astral.sh/uv/), fetches a Python if you have none new
-enough, and installs `harness` as a tool. The repo is private, so set
-`GITHUB_TOKEN` first, or have SSH access configured:
+Into a virtualenv (recommended):
 
 ```bash
-export GITHUB_TOKEN=ghp_...
-curl -fsSL <raw-url>/install.sh | sh -s -- --ref v0.1.0
+python3 -m venv .venv
+.venv/bin/python install.py
+```
+
+Or onto the user site, if a virtualenv is not an option:
+
+```bash
+python3 install.py --user
+```
+
+## From a wheel directly
+
+The wheel is `py3-none-any` — one file, every OS, every Python 3.11+:
+
+```bash
+pip install harness_lab-0.1.0-py3-none-any.whl[openai]
 ```
 
 ## From a checkout
@@ -37,22 +48,54 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev,openai]'
 .venv/bin/python -m pytest -q      # ~12s, no network, no API key
 ```
 
-Editing the mock API's *domain* — the entities, the routes, the seeded world —
-means working from a checkout. Its *shape* (`--cores`, `--fan-out`,
-`--surface-size`, `--difficulty`, `--seed`) is a parameter everywhere.
+Editing the mock API's *domain* — its entities, routes and seeded world — means
+working from a checkout. Its *shape* (`--cores`, `--fan-out`, `--surface-size`,
+`--difficulty`, `--seed`) is a parameter everywhere.
+
+## Running it
+
+Two forms, and no third:
+
+```bash
+harness lint --demo
+python3 -m harness lint --demo
+```
+
+The second always works. The first needs the install's script directory on
+PATH, which a virtualenv nobody activated will not have — `install.py` prints
+the exact `export PATH=...` line for your machine if so.
+
+## Checking the environment
+
+```bash
+harness doctor
+```
+
+Reports Python, the package, its dependencies, your API key, `curl`, `git` and
+free disk — and for anything missing, **what that specific thing blocks**:
+
+```
+[ok  ] curl      /usr/bin/curl
+[warn] api key   no OPENAI_API_KEY
+                 ↳ blocks: any run that calls a model. `lint` does not need one
+```
+
+It exits non-zero only when something *required* is absent, so it is safe in a
+health check. It imports no provider SDK and touches no network — it has to
+work when the install is broken, which is the only time anyone runs it.
 
 ## Requirements
 
-- **Python 3.11+.** Stock macOS ships 3.9; the `.pyz` says so rather than
-  failing on an import.
-- **`curl` on PATH** for the C arms, which shell out.
-- **`git`** if you use an authored skill — provenance records the commit.
-- An **`OPENAI_API_KEY`** for anything that runs a model. `harness lint` needs
+- **Python 3.11+.** Stock macOS ships 3.9.
+- **`curl` on PATH** for the C arms, which shell out to it.
+- **`git`** for authored-skill provenance; the `-auth` arms record
+  `uncommitted` without it.
+- An **`OPENAI_API_KEY`** for anything that calls a model. `harness lint` needs
   none.
 
-Credentials go in `.env` at the repo root (gitignored; copy `.env.example`).
-Nothing needs exporting — the CLI loads `.env` and prints which names it found,
-never their values.
+Credentials go in `.env` at the working directory (gitignored; copy
+`.env.example`). Nothing needs exporting — the CLI loads `.env` and prints which
+names it found, never their values.
 
 ## A warning worth reading first
 
@@ -64,8 +107,9 @@ without `D1`/`D2` avoids it entirely.
 ## Check it works
 
 ```bash
-harness lint --demo                 # free, no key, one second
-harness run --out /tmp/s --id s --smoke --yes   # ~12 runs, ~1 min, ~$0.05
+harness doctor
+harness lint --demo                              # free, no key, one second
+harness run --out /tmp/s --id s --smoke --yes    # ~12 runs, ~1 min, ~$0.05
 ```
 
 The smoke run proves the pipeline end to end. It is not a result — three arms

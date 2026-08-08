@@ -1,10 +1,11 @@
 name: release
 
-# Tag push builds the artifacts and attaches them to the release.
+# Tag push builds the release artifacts and attaches them.
 #
-# The .pyz is built per platform on purpose: it carries compiled wheels
-# (pydantic_core), so one built on macOS does not run on Linux. The wheel is
-# pure Python and is built once.
+# No build matrix. The wheel is `py3-none-any` — one file for every OS and every
+# Python 3.11+ — so there is nothing per-platform to build. pip resolves the
+# native dependencies (pydantic_core) on the installing machine, which is where
+# that decision belongs.
 on:
   push:
     tags: ["v*"]
@@ -16,68 +17,52 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Every interpreter the package claims to support. `requires-python`
+        # is a promise, and this is the only thing that checks it.
+        python: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python }}
       - run: pip install -e '.[dev,openai]'
-      # No network and no API key: the suite is expected to run this way, and
-      # a release that needs a credential to be verified cannot be verified by
-      # anyone but us.
+      # No network and no API key. The suite is expected to run this way, and a
+      # release that needs our credentials to verify is one only we can verify.
       - run: python -m pytest -q
 
   build:
     needs: test
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            label: linux-x86_64
-          - os: macos-latest
-            label: macos-arm64
-          - os: macos-13
-            label: macos-x86_64
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
-      - run: pip install shiv
       - run: ./build.sh
 
-      - name: Smoke-test the artifact
-        shell: bash
+      - name: Install it the way a recipient would
         run: |
           set -euo pipefail
-          pyz=$(ls dist/*.pyz)
-          # Run it from a directory with no checkout in it, which is the only
-          # way this proves anything about what a customer receives.
+          # A scratch directory with no checkout in it: installing from the repo
+          # would test the source tree, not the artifact.
           tmp=$(mktemp -d)
-          cp "$pyz" "$tmp/harness.pyz"
-          cd "$tmp"
-          python harness.pyz --version
-          python harness.pyz lint --demo
-          python harness.pyz init --agent both --dir .
+          unzip -q dist/harness-lab-*.zip -d "$tmp"
+          cd "$tmp"/harness-lab-*
+          python3 -m venv .venv
+          .venv/bin/python install.py
+          .venv/bin/harness --version
+          .venv/bin/harness doctor
+          .venv/bin/harness lint --demo
+          .venv/bin/python -m harness lint --demo
+          .venv/bin/harness init --agent both --dir .
           test -f .claude/skills/harness-field-pack/SKILL.md
-
-      - name: Name the artifacts for their platform
-        shell: bash
-        run: |
-          cd dist
-          for f in *.pyz; do mv "$f" "${f%.pyz}-${{ matrix.label }}.pyz"; done
-          for f in *.zip; do mv "$f" "${f%.zip}-${{ matrix.label }}.zip"; done
 
       - uses: actions/upload-artifact@v4
         with:
-          name: dist-${{ matrix.label }}
-          path: |
-            dist/*.pyz
-            dist/*.zip
-            dist/*.whl
+          name: dist
+          path: dist/*
 
   publish:
     needs: build
@@ -86,10 +71,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
+          name: dist
           path: dist
-          merge-multiple: true
-      # Wheels are identical across the matrix; keep one.
-      - run: ls -la dist && rm -f dist/*.whl.1 || true
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
