@@ -16,11 +16,11 @@ Rules:
 | T0.1 | Freeze capability list + REST shapes | S0 | — | `harness-ui/TASKS.md`, `docs/contracts.md` | Peer review | done | s0 |
 | T0.2 | Freeze adapter JSON schemas | S0 | — | `harness-ui/adapter/schemas/` | Peer review | done | s0 |
 | T0.3 | Scaffold dirs, nested `.gitignore`, README | S0 | — | `harness-ui/` | Tree matches layout | done | s0 |
-| T1.1 | `harness_json.py report` | S1 | T0.2 | `adapter/` | Runs on `results/auth-smoke` | todo | |
-| T1.2 | `harness_json.py progress` | S1 | T0.2 | `adapter/` | Runs on `results/auth-smoke` | todo | |
-| T1.3 | `harness_json.py lint` | S1 | T0.2 | `adapter/` | Runs on `examples/openapi.json` | todo | |
-| T1.4 | `harness_json.py pack-validate` | S1 | T0.2 | `adapter/` | Good + bad pack both handled | todo | |
-| T1.5 | Version assertion + contract tests | S1 | T1.1–T1.4 | `adapter/tests/` | Fails loudly on wrong version | todo | |
+| T1.1 | `harness_json.py report` | S1 | T0.2 | `adapter/` | Runs on `results/auth-smoke` | done | s1 |
+| T1.2 | `harness_json.py progress` | S1 | T0.2 | `adapter/` | Runs on `results/auth-smoke` | done | s1 |
+| T1.3 | `harness_json.py lint` | S1 | T0.2 | `adapter/` | Runs on `examples/openapi.json` | done | s1 |
+| T1.4 | `harness_json.py pack-validate` | S1 | T0.2 | `adapter/` | Good + bad pack both handled | done | s1 |
+| T1.5 | Version assertion + contract tests | S1 | T1.1–T1.4 | `adapter/tests/` | Fails loudly on wrong version | done | s1 |
 | T2.1 | Maven module, config, loopback bind | S2 | T0.3 | `api/` | `mvnw verify` green | todo | |
 | T2.2 | `HarnessCli` subprocess + exit-code mapping | S2 | T0.1 | `api/core/` | All 6 exit codes mapped | todo | |
 | T2.3 | Targets: upload contract, list | S2 | T2.2 | `api/` | `curl -F file=@examples/openapi.json` | todo | |
