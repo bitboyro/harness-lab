@@ -39,17 +39,31 @@ First tagged release.
 - **`harness report` / `compare` / `progress` / `plan` / `rig`** — reporting,
   N-run diffs with pooling refusals, live progress, cost projection with an
   approval gate, and rig sizing against a target MDE.
-- Single-file build (`build.sh`) and a `curl | sh` installer.
+- **`harness doctor`** — reports Python, dependencies, credentials, `curl`,
+  `git` and disk, and for anything missing says what that specific thing blocks.
+  Imports no provider SDK and touches no network, because it is what you run
+  when the install is broken.
+- **`python -m harness`** alongside the `harness` console script. Two ways in
+  and no third; the module form works when PATH does not.
+- `build.sh` (wheel + a hand-off bundle) and `install.py`, an installer that
+  runs on any Python 3 so an interpreter too old to run harness still gets an
+  explanation instead of a `SyntaxError`.
 
 ### Notes on this release
 
 - **Field mode reaches everything the matrix does.** It previously ran through a
   separate command that had no ledger, no concurrency, no resume and no report.
   There is no `harness probe`; it is `harness run --pack`.
-- **A `.pyz`, not a frozen binary.** The sandbox arms execute model-written
-  Python via `sys.executable`, which under PyInstaller resolves to the frozen
-  executable — those arms would break, and break as ordinary failure rows rather
-  than as an error. The `.pyz` keeps a real interpreter, and is therefore built
-  per platform.
+- **A wheel, not a bundled single file.** Two single-file approaches were built
+  and discarded. A frozen binary breaks the sandbox arms, which execute
+  model-written Python via `sys.executable` — under PyInstaller that resolves to
+  the frozen executable, and the arms fail as ordinary result rows rather than as
+  an error. A `shiv` `.pyz` fixes that but inherits the tag of its native
+  dependencies: one built on CPython 3.13 for macOS/arm64 fails on 3.12, on the
+  same machine, with `ImportError: module 'harness' has no attribute 'cli'`.
+  That is an artifact per OS per Python minor version, each failing
+  unhelpfully. The wheel is `py3-none-any` — one file for every OS and every
+  supported Python — and `pip` resolves the native dependencies per machine,
+  which is the job `pip` is good at.
 - **Metrics are unvalidated in field mode**, and 0 of 8 lint rules have a
   measured effect size. Both are printed on every artifact.

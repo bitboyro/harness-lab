@@ -82,9 +82,12 @@ Both run through one command and one execution path. The difference is a
 ## Install
 
 ```bash
-python3 harness.pyz lint --demo              # single file, no install
-curl -fsSL <raw-url>/install.sh | sh         # tool on your PATH
+python3 install.py --check     # what is missing, and what each thing blocks
+python3 install.py             # installs the wheel beside it
+harness doctor                 # same checks, any time after
 ```
+
+Two ways to run it and no third — `harness …` or `python3 -m harness …`.
 
 Needs Python 3.11+, plus `curl` for the shell arms. Full options, and a warning
 about the sandbox arms, in [docs/install.md](./docs/install.md).

@@ -811,6 +811,15 @@ def _build_report(store, *, mde_pp: float | None = None,
                   weights=weights)
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """What is installed, what is missing, and what that stops you doing."""
+    from .doctor import MISSING, render, run
+
+    checks = run()
+    print(render(checks))
+    return 1 if any(c.status == MISSING for c in checks) else 0
+
+
 def cmd_scaffold(args: argparse.Namespace) -> int:
     """Draft a task pack from a live surface or an OpenAPI document."""
     from .engine.generate import spec_from_tools
@@ -1312,6 +1321,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-cross-world", action="store_true",
         help="exit 0 even when a pooling boundary is broken")
     cmp_p.set_defaults(func=cmd_compare)
+
+    doc_p = sub.add_parser("doctor",
+                           help="check this machine can run harness, and say "
+                                "what each missing piece blocks")
+    doc_p.set_defaults(func=cmd_doctor)
 
     sc_p = sub.add_parser("scaffold",
                           help="draft a task pack from a live MCP server or an OpenAPI doc")

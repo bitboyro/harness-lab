@@ -309,14 +309,23 @@ def test_error_facts_mark_transient_kinds_non_fatal() -> None:
 # The same 2026-08-06 incident from the module docstring, approached from the
 # other side: the check that should have stopped the matrix before it started.
 
-def test_projection_measures_compressed_traces(tmp_path) -> None:
+def test_projection_measures_compressed_traces(tmp_path, monkeypatch) -> None:
+    import shutil
+
     from harness.cli import _disk_shortfall
 
     store = ResultStore(tmp_path)
     for i in range(5):
         (store.root / "traces" / f"r{i}.json.gz").write_bytes(b"x" * 200_000)
 
-    # 10 runs x 200KB is nothing against any real volume, so this must fit.
+    # Free space is pinned rather than read from the host. The check reserves
+    # 5GB of headroom, so on a developer machine sitting below that every
+    # "this fits" assertion fails for a reason that has nothing to do with the
+    # projection under test.
+    monkeypatch.setattr(shutil, "disk_usage",
+                        lambda _p: shutil._ntuple_diskusage(0, 0, 500 * 2**30))
+
+    # 10 runs x 200KB is nothing against a volume that size, so this must fit.
     assert _disk_shortfall(store, planned=10) is None
     # ...and 100 million of them must not, or the check is not checking.
     assert _disk_shortfall(store, planned=100_000_000) is not None
