@@ -36,9 +36,9 @@ Rules:
 | T3.4 | Run config → projection → approve → progress | S3 | T3.1 | `web/` | Polling stops when terminal | todo | |
 | T3.5 | Results, artifact viewer iframe, compare page | S3 | T3.1 | `web/` | Sorting works, `window.parent` fails | todo | |
 | T3.6 | PWA manifest + service worker | S3 | T3.2–T3.5 | `web/public/` | Offline report opens | todo | |
-| T4.1 | Dockerfile: 3 stages, pinned `--tag` | S4 | T0.3 | `Dockerfile` | `docker build` clean | todo | |
-| T4.2 | compose: loopback, env_file, /data volume | S4 | T4.1 | `docker-compose.yml` | `ps` shows `127.0.0.1:8085->` | todo | |
-| T4.3 | `harness doctor` green inside the image | S4 | T4.1 | — | python, curl, version | todo | |
+| T4.1 | Dockerfile: 3 stages, pinned `--tag` | S4 | T0.3 | `Dockerfile` | `docker build` clean | blocked | s4 — files written; full `docker build` needs S2 `api/src` + S3 `web/` (`package-lock.json`, `output: 'export'` → `out/`); daemon also down here |
+| T4.2 | compose: loopback, env_file, /data volume | S4 | T4.1 | `docker-compose.yml` | `ps` shows `127.0.0.1:8085->` | blocked | s4 — compose written (`127.0.0.1:8085`, `../.env`, `./harness-data:/data`); `compose config` ok; `up` blocked on T4.1 |
+| T4.3 | `harness doctor` green inside the image | S4 | T4.1 | `scripts/smoke-doctor.sh` | python, curl, version | blocked | s4 — `smoke-doctor.sh` builds `--target runtime-base`; Docker daemon not running in this environment |
 | T5.1 | `@Tool` annotations on the same services | S5 | T2.4, T2.5 | `api/mcp/` | `tools/list` returns all | todo | |
 | T5.2 | Capability parity test | S5 | T5.1 | `api/` | Red build when one removed | todo | |
 | T5.3 | Authored `SKILL.md` + `authored_commit` | S5 | T5.1 | `skill/` | Committed before T7.1 | todo | |

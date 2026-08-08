@@ -1,0 +1,15 @@
+# For builds with context = harness-ui/ (not the default compose path).
+# Default invoke uses repo-root context + Dockerfile.dockerignore instead.
+
+.git
+**/node_modules
+**/.next
+web/out
+api/target
+**/__pycache__
+**/.pytest_cache
+**/*.pyc
+harness-data
+.env
+.DS_Store
+*.log

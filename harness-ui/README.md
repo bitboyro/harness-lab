@@ -46,10 +46,29 @@ Adapter (needs the repo's venv / installed harness):
 python3 harness-ui/adapter/harness_json.py report results/auth-smoke | python3 -m json.tool | head
 ```
 
-API / web / image: see stream READMEs once S2–S4 land. Compose:
+### Docker (S4)
+
+Build context is the **repo root** (the image `COPY`s root `install.py`). Compose
+sets `context: ..` and `dockerfile: harness-ui/Dockerfile`.
+
+Pinned wheel: `HARNESS_VERSION` build-arg defaults to `v0.0.1`. The runtime
+stage always runs `python3 install.py --download --tag=$HARNESS_VERSION` into
+`/opt/venv` (PEP 668). Never use bare `--download`.
 
 ```bash
+# Full image (needs S2 api/ + S3 web/ with package-lock and static export)
+docker build -f harness-ui/Dockerfile --build-arg HARNESS_VERSION=v0.0.1 -t harness-ui .
+
 cd harness-ui && docker compose up --build
+# publishes 127.0.0.1:8085 only; mounts ./harness-data → /data
+# env_file: ../.env  (repo-root credentials, same as the CLI)
+```
+
+Harness install smoke without api/web:
+
+```bash
+./harness-ui/scripts/smoke-doctor.sh
+# docker build --target runtime-base … && harness doctor + version assert
 ```
 
 ## Safety
