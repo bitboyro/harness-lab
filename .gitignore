@@ -29,7 +29,7 @@ __pycache__/
 .pytest_cache/
 build/
 dist/
-
+scripts/
 # Everything we keep but do not distribute. Two kinds live here, and the
 # difference matters:
 #
