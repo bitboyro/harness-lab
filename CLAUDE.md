@@ -103,7 +103,18 @@ These are load-bearing for the research claims, not style preferences. Most have
 
 Docs are the reasoning trail, and code comments cite them by ID (`L1`, `F4`, `G6`, `V9`, `API-8`, `RQ3`). Read the relevant one before changing behaviour it describes.
 
-**`docs/` ships. `archive/` does not.** That split is a distribution decision, not a statement about which is current — the reference contracts under `archive/reference/` are as live as anything in the repo, they are just not a customer's business.
+**`docs/` ships. `archive/` does not.** That split is a distribution decision, not a statement about which is current — the reference contracts under `archive/reference/` are as live as anything in the repo, they are just not published.
+
+> **The remote is public.** `archive/` is gitignored, which keeps it out of the
+> working tree of a commit — it does **not** keep it out of history. Those paths
+> were once committed and then removed; the commits were rewritten before any
+> push so no object on `main` contains them. Two rules follow:
+>
+> - **Never `git add -f` anything under `archive/`.** The gitignore is the only
+>   thing standing between an internal document and a public repository.
+> - **Never push `p0-contracts` or `archive/p0-contracts`.** Both branches carry
+>   the full research log in their trees, including everything under `archive/`.
+>   They exist as local backups. Same for the `archive/*` tags.
 
 | File | Ships | Role |
 |---|---|---|
