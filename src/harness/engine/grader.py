@@ -16,7 +16,7 @@ Two rules that are not negotiable:
   - The grader never sees which arm produced a trace (V5). It is handed a trace
     and a task, and that is all.
 
-Contract: docs/harness-benchmark-spec.md §4.5, §5; decisions.md O6
+Contract: docs/reference/experiment-design.md#grading; docs/reference/decisions.md O6
 """
 
 from __future__ import annotations

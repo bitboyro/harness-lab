@@ -7,7 +7,7 @@ they change how every chart below should be read — a reader who learns about t
 MDE after looking at the bars has already formed an impression the bars did not
 earn.
 
-Contract: docs/harness-benchmark-spec.md deliverable 7
+Contract: docs/reference/experiment-design.md#deliverables
 """
 
 from __future__ import annotations

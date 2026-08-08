@@ -10,7 +10,7 @@ task carries a `TODO` prompt and no grader, so a pack straight out of scaffold
 loads and runs but grades nothing. A stub that quietly asserted something
 plausible would be worse than an empty file: it would look finished.
 
-Contract: docs/task-pack-schema.md
+Contract: docs/task-packs.md
 """
 
 from __future__ import annotations

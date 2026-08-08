@@ -5,7 +5,7 @@ concern: adding a method never touches the engine, which is what stops the
 harness ageing out when the protocol moves — and it moved on 2026-07-28, which is
 the proof the seam was needed rather than speculative.
 
-Contract: docs/packaging-method.md §3, §6
+Contract: docs/reference/packaging-axes.md#plugin-interface
 """
 
 from __future__ import annotations

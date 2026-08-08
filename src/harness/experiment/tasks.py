@@ -13,7 +13,7 @@ Answer keys come from the same seeded world the API serves, so grading never
 depends on parsing prose. Roughly 15% of tasks are unanswerable, to measure
 false-positive answering.
 
-Contract: docs/harness-benchmark-spec.md §3.3, §4.5
+Contract: docs/reference/experiment-design.md#task-design, #grading
 """
 
 from __future__ import annotations

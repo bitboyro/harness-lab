@@ -6,7 +6,7 @@ server-side request logs with timestamps, usage counters, and the config
 snapshot — including ``mcp_spec_revision``, without which a pre- and
 post-2026-07-28 run cannot be told apart later.
 
-Contract: docs/harness-benchmark-spec.md §6.4
+Contract: docs/reference/experiment-design.md#what-is-persisted
 """
 
 from __future__ import annotations

@@ -51,7 +51,7 @@ A smoke run that exercises the whole pipeline cheaply:
 harness run --out /tmp/smoke --id smoke --smoke --yes
 ```
 
-`docs/running-the-experiment.md` is the operator manual — every flag, the recommended 40-core matrix, how the winner is scored, and what a broken run looks like. `docs/testing-your-own-api.md` covers field mode.
+`docs/controlled-rig.md` is the operator manual — the recommended 40-core matrix, resume, and what a broken run looks like. `docs/your-api.md` covers field mode, and `docs/reading-results.md` covers how the winner is scored.
 
 ## Architecture
 
@@ -85,7 +85,7 @@ experiment/   the fictional catalog API, seeder, answer keys, grader
 
 ## Invariants that are easy to break
 
-These are load-bearing for the research claims, not style preferences. Most have a test behind them; all have a rationale in `docs/decisions.md`.
+These are load-bearing for the research claims, not style preferences. Most have a test behind them; all have a rationale in `docs/reference/decisions.md`.
 
 - **Isolation is per run.** Each run gets its own seeded API instance and ephemeral port, so mutating tasks parallelize safely and nothing contaminates the next cell.
 - **Never pool** across `model`, `mcp_revision`, skill condition (generated vs. authored), or report class (controlled vs. field). `harness compare` prints `REFUSING TO POOL` and exits 3 when a boundary breaks — that exit code is what makes `harness compare a b && publish` refuse.
@@ -105,14 +105,17 @@ These are load-bearing for the research claims, not style preferences. Most have
 
 | File | Role |
 |---|---|
-| `harness-benchmark-spec.md` | Research requirements: RQs, arms, metrics, validity controls. Amended in place, never rewritten |
-| `plan.md` | The design spec, v2. Locked decisions L1–L14, delivery phases |
-| `decisions.md` | **The reasoning.** Where `plan.md` and this disagree, this one is right and `plan.md` needs fixing |
-| `packaging-method.md` | Frozen contract: axes, plugin interface, preset table |
-| `task-pack-schema.md` | Frozen contract: the interop format that makes bring-your-own-API possible |
-| `statistical-plan.md` | Model, power/MDE, confirmatory vs. exploratory split — written before any matrix ran |
-| `running-the-experiment.md`, `testing-your-own-api.md` | Operator manuals |
-| `proposal-*.md` | Designs not yet built; `handoff-*.md` records a shipped feature's decisions |
+| `install.md`, `your-api.md`, `controlled-rig.md`, `reading-results.md` | The four reader-facing guides |
+| `task-packs.md` | Frozen contract: the interop format that makes bring-your-own-API possible |
+| `reference/experiment-design.md` | Research requirements: RQs, the test API, metrics, validity controls |
+| `reference/packaging-axes.md` | Frozen contract: axes, plugin interface, preset table |
+| `reference/statistics.md` | Model, power/MDE, confirmatory vs. exploratory split — written before any matrix ran |
+| `reference/decisions.md` | **The reasoning.** Stable IDs (F/G/O) that code cites; treat them as an API |
+
+Code cites these by **slug anchor**, not section number — a number drifts
+silently, a renamed heading fails `tests/test_docs.py`. Superseded design
+records (`plan.md`, `plan-review.md`, the proposals) live on the
+`archive/p0-contracts` branch.
 
 When behaviour changes, amend the doc in the same commit — with an `⚠ AMENDED` marker rather than a silent rewrite, so a reader meets the argument instead of the omission.
 

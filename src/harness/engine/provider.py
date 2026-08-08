@@ -6,7 +6,7 @@ and the thing being measured *is* the harness around the API.
 
 Signatures only at P0. OpenAI lands at P1.
 
-Contract: docs/harness-benchmark-spec.md §6.1–6.2
+Contract: docs/reference/experiment-design.md#providers
 """
 
 from __future__ import annotations

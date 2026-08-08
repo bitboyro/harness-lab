@@ -14,7 +14,7 @@ there is no way to tell one from a result.
 
 ---
 
-## 1. What varies, and what that implies
+## What varies
 
 | Level | Unit | Notes |
 |---|---|---|
@@ -36,7 +36,7 @@ Two consequences follow, and both are easy to get wrong:
 
 ---
 
-## 2. Primary model
+## The model
 
 Mixed-effects logistic regression on run-level success:
 
@@ -60,7 +60,7 @@ tokenisers differ across providers, so token counts are not comparable (§5.6).
 
 ---
 
-## 3. Confirmatory vs. exploratory
+## Confirmatory vs exploratory
 
 Declared here, enforced by the run planner, which refuses a publishable matrix
 with no `confirmatory` block.
@@ -94,7 +94,7 @@ exists to prevent.
 
 ---
 
-## 4. Power and the minimum detectable effect
+## Power and MDE
 
 > **Corrected 2026-08-06.** The first version of this section carried MDEs of
 > ≈9 / ≈20 / ≈25 pp. Those were too optimistic: they treated all 225 runs per arm
@@ -155,7 +155,7 @@ labelled as such.
 
 ---
 
-## 5. Stopping and exclusions
+## Stopping and exclusions
 
 Declared in advance so neither can be used to steer a result.
 
@@ -172,7 +172,7 @@ Declared in advance so neither can be used to steer a result.
 
 ---
 
-## 6. Comparing runs
+## Comparing runs
 
 `harness compare` measures the same arm in two (or more) runs. Nothing in this
 section is pre-registered: which two runs get compared is decided after both
@@ -230,7 +230,7 @@ whose interval spans zero, is not a finding.
 
 ---
 
-## 7. What gets published regardless
+## Published regardless
 
 - Disconfirmed predictions, stated as such. P1–P9 are on record; the ones that
   fail get reported with the same prominence as the ones that hold.
@@ -241,7 +241,7 @@ whose interval spans zero, is not a finding.
 
 ---
 
-## 8. Threats this plan does not fix
+## Threats this plan does not fix
 
 Stated plainly, because a plan that claims to solve everything is not credible.
 

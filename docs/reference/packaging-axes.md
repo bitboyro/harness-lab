@@ -9,7 +9,7 @@ A **packaging method** is one way of presenting an API to an agent. This documen
 
 ---
 
-## 1. Axes
+## Axes
 
 Every axis is orthogonal: it describes one property, and no axis implies another. A variant is a complete assignment. Nothing is defaulted implicitly — a variant with an unset axis is a config error, not a variant.
 
@@ -65,7 +65,7 @@ These describe the API's own design, and they are **manipulated, not fixed** —
 
 ---
 
-## 2. Presets
+## Presets
 
 Named points in the space. Presets are a convenience for run plans and papers; the axis assignment is the primitive.
 
@@ -96,7 +96,7 @@ Every preset below is a **complete** assignment — no axis is left implicit. Af
 
 ---
 
-## 3. Plugin interface
+## Plugin interface
 
 **Adding a packaging method is a new plugin file. It is never a change to the engine.** This is the seam that keeps the harness from aging out when the protocol moves again — and it moved on 2026-07-28, which is the proof that it will.
 
@@ -136,8 +136,9 @@ class Executor(Protocol):
 
 Implementations: `McpToolCallExecutor` (both revisions), `ShellExecutor` (bash + curl subprocess), `CodeExecutor` (Python sandbox subprocess), `PreExecutedExecutor` (Z1), `NullExecutor` (Z0).
 
-Sandbox isolation follows [D3](./decisions.md#harness-benchmark-specmd-open-questions): subprocess per run for controlled phases, container per run for field mode against real targets.
+Sandbox isolation follows [D3](./decisions.md#experiment-designmd-open-questions): subprocess per run for controlled phases, container per run for field mode against real targets.
 
+<a id="cost-breakdown"></a>
 ### `CostBreakdown`
 
 The cost model must decompose, not total — the whole point of [F3](./decisions.md#f3--support-both-mcp-spec-revisions) is that different methods pay in different places.
@@ -159,7 +160,7 @@ class CostBreakdown:
 
 ---
 
-## 4. Metric validation status
+## Metric validation
 
 Every metric carries a validation flag, printed in every report footer ([F1](./decisions.md#f1--tool-first-study-second)):
 
@@ -173,7 +174,7 @@ Field reports ship before the rig exists, so they ship with `unvalidated` metric
 
 ---
 
-## 5. Matrix selection
+## Matrix selection
 
 A run is a *declared subset* with a stated rationale — never the full cross product.
 
@@ -216,7 +217,7 @@ Required behaviour of the planner:
 
 ---
 
-## 6. Designed-for, not yet built
+## Designed for, not yet built
 
 Each is a plugin, not an engine change. Listed so the interface is checked against them now rather than bent around them later.
 

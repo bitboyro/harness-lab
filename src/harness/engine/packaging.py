@@ -4,7 +4,7 @@ Adding a packaging method is a new plugin file. It is never a change to the
 engine. The 2026-07-28 MCP revision landing mid-design is the proof this seam
 was needed: a protocol reshape should cost one file, not a refactor.
 
-Contract: docs/packaging-method.md §3
+Contract: docs/reference/packaging-axes.md#plugin-interface
 """
 
 from __future__ import annotations

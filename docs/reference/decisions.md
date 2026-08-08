@@ -1,7 +1,7 @@
 # Decision Record
 
 **Status:** Adopted — 2026-08-05
-**Supersedes:** the open-question lists in [`plan.md`](./plan.md) §7 (O1–O8), [`harness-benchmark-spec.md`](./harness-benchmark-spec.md) §11 (D1–D6), and [`plan-review.md`](./plan-review.md) Part 6 (#1–#6).
+**Supersedes:** the open-question lists in `plan.md` (archived) §7 (O1–O8), [`experiment-design.md`](./experiment-design.md) §11 (D1–D6), and `plan-review.md` (archived) Part 6 (#1–#6).
 
 This is the durable record of *why* each decision went the way it did. `plan.md` describes the resulting system; this file explains the choices. When the two disagree, this file is the reasoning and `plan.md` is the spec — fix `plan.md`.
 
@@ -67,7 +67,7 @@ See [D-G2](#g2--three-tier-output-model).
 
 **Reframe — and this is the important part.** The review called `code-fs` "the cell most likely to produce the headline result." Verification says otherwise: [2602.15945](https://arxiv.org/abs/2602.15945) already formalizes context-coupled vs. context-decoupled MCP and evaluates it on MCP-Bench. Code execution is therefore **table stakes** — its absence would make the benchmark obsolete, but its presence is no longer differentiating. The headline moves to the questions that paper does *not* answer: [G4](#g4--response-and-error-design-as-manipulated-variables) (error/response affordances) and RQ3/RQ4 (harm asymmetry across mutation routes, and arm-ranking reversal between read and write classes).
 
-Full axis list, plugin interface, and preset table: [`packaging-method.md`](./packaging-method.md).
+Full axis list, plugin interface, and preset table: [`packaging-axes.md`](./packaging-axes.md).
 
 ### G2 — Three-tier output model
 
@@ -83,7 +83,7 @@ Full axis list, plugin interface, and preset table: [`packaging-method.md`](./pa
 
 **Why:** It is the interop contract — everything downstream is shaped by it and it is expensive to change once traces exist in the wild. `forbidden_calls` in particular buys a harm signal on real APIs where state cannot be diffed, which partially rescues the safety metrics in field mode.
 
-Schema: [`task-pack-schema.md`](./task-pack-schema.md).
+Schema: [`task-pack-schema.md`](../task-packs.md).
 
 ### G4 — Response and error design as manipulated variables
 
@@ -137,7 +137,7 @@ With code execution no longer differentiating (see [G1](#g1--orthogonal-variant-
 
 ### G11 — Infrastructure failures are void, not data
 
-**Decision:** Adopt the taxonomy in [`proposal-infra-error-handling.md`](./proposal-infra-error-handling.md). A run that dies for reasons outside the arm under test is recorded with an `error_kind`, graded `outcome=infra-error`, excluded from every rate, and **re-run by `--resume` rather than skipped**. `disk`, `auth` and `billing` abort the matrix on first occurrence (exit 40); transient kinds are retried in place with capped, jittered backoff.
+**Decision:** Adopt the taxonomy in `proposal-infra-error-handling.md` (archived). A run that dies for reasons outside the arm under test is recorded with an `error_kind`, graded `outcome=infra-error`, excluded from every rate, and **re-run by `--resume` rather than skipped**. `disk`, `auth` and `billing` abort the matrix on first occurrence (exit 40); transient kinds are retried in place with capped, jittered backoff.
 
 **Three rules that are not negotiable:**
 
@@ -168,7 +168,7 @@ world or a different model) always trips the gate.
 **Consequence:** Nothing cross-run is pre-registered or Holm-corrected. The
 unpaired interval is Newcombe, not Wald — Wald collapses at the edges and makes
 a 2-for-2 smoke arm look like a finding. Contract:
-[`statistical-plan.md` §6](./statistical-plan.md#6-comparing-runs).
+[`statistics.md` §6](./statistics.md#comparing-runs).
 
 ### G13 — Arms not in every run are excluded from the head-to-head
 
@@ -197,7 +197,7 @@ exclusion visible rather than silent.
 
 ---
 
-## `harness-benchmark-spec.md` open questions
+## `experiment-design.md` open questions
 
 | # | Question | Decision |
 |---|---|---|
@@ -235,7 +235,7 @@ Non-blocking. None of these gate P0.
 
 | # | Question | Notes |
 |---|---|---|
-| **N1** | First field-mode target — **secondary to the mock API**, needed at P2 | Candidate: the workspace's own `eu-regulations` MCP server (~12 tools). Live `tools/list` verified 2026-08-05; worked pack in [`task-pack-schema.md`](./task-pack-schema.md) §5. Real MCP surface, real docs, under our control, and *structurally* the registry shape spec §4.1 wanted. Using it does not violate L3, which governs the **fictional** domain, not the field target. **Caveat:** three `graphTypes` layers are declared but unpopulated — requesting them returns nothing without an error. A silent-failure trap worth measuring deliberately, and a sign the surface is still under development, so record the server version per run. |
+| **N1** | First field-mode target — **secondary to the mock API**, needed at P2 | Candidate: the workspace's own `eu-regulations` MCP server (~12 tools). Live `tools/list` verified 2026-08-05; worked pack in [`task-pack-schema.md`](../task-packs.md) §5. Real MCP surface, real docs, under our control, and *structurally* the registry shape spec §4.1 wanted. Using it does not violate L3, which governs the **fictional** domain, not the field target. **Caveat:** three `graphTypes` layers are declared but unpopulated — requesting them returns nothing without an error. A silent-failure trap worth measuring deliberately, and a sign the surface is still under development, so record the server version per run. |
 | **N2** | Product naming | `harness-lab` names the rig, not the thing a user runs. Only matters when T1 ships. |
 | **N3** | Who authors `skill-authored` | Must be written before results exist ([G6](#g6--two-skill-conditions)) — schedules into the rig phase, not the matrix phase. |
 | **N4** | Publication intent and venue | Determines how hard pre-registration and the statistical plan must be, and whether an artifact-evaluation-grade release is needed. |

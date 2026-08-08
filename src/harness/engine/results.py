@@ -12,7 +12,7 @@ two thirds of the way through should leave two thirds of its results on disk,
 not nothing. It also makes a run resumable, which matters once a matrix takes
 long enough that interrupting it is normal.
 
-Contract: docs/harness-benchmark-spec.md §6.4
+Contract: docs/reference/experiment-design.md#what-is-persisted
 """
 
 from __future__ import annotations
