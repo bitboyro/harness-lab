@@ -76,20 +76,33 @@ def _instruction_block(spec: ApiSpec, variant: Variant) -> ContextBlock | None:
     )
 
 
-def _skill_roots() -> list["Path"]:
-    """Where an authored skill may live.
+#: Extra places to look for an authored skill, appended by whoever owns them.
+#: The rig registers its own fixture here rather than the engine hardcoding a
+#: path into `experiment/` — the engine may not know that package exists, and a
+#: field user's `./skills/` must keep winning, so these come last.
+_EXTRA_SKILL_ROOTS: list["Path"] = []
 
-    Resolved against the repo root as well as the cwd: a matrix launched from
-    anywhere but the repo root would otherwise fail every -auth arm with a
-    missing-file error, and the failure looks like a config mistake rather than
-    a path bug.
+
+def register_skill_root(root: "Path") -> None:
+    """Add a fallback location for authored skills. Idempotent."""
+    if root not in _EXTRA_SKILL_ROOTS:
+        _EXTRA_SKILL_ROOTS.append(root)
+
+
+def _skill_roots() -> list["Path"]:
+    """Where an authored skill may live, in precedence order.
+
+    The cwd comes first because `./skills/<api>.md` is the documented convention
+    for a user bringing their own authored skill. The repo root follows so a
+    matrix launched from elsewhere does not fail every -auth arm with a
+    missing-file error that looks like a config mistake rather than a path bug.
     """
     from pathlib import Path
     import os
     here = Path(__file__).resolve()
     # src/harness/engine/methods.py -> repo root
     repo_root = here.parents[3]
-    roots = [Path.cwd(), repo_root]
+    roots = [Path.cwd(), repo_root, *_EXTRA_SKILL_ROOTS]
     if override := os.environ.get("HARNESS_SKILLS_DIR"):
         roots.insert(0, Path(override).parent if Path(override).name == "skills"
                      else Path(override))
@@ -456,7 +469,7 @@ def _authored_commit(v: Variant) -> str | None:
     try:
         return subprocess.run(
             ["git", "-C", str(repo_root), "log", "-1", "--format=%H",
-             "--", "skills/"],
+             "--", "src/harness/experiment/skills/", "skills/"],
             capture_output=True, text=True, check=True,
         ).stdout.strip() or "uncommitted"
     except Exception:  # noqa: BLE001 — absence of git is not a run failure

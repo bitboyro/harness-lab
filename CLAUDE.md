@@ -124,5 +124,6 @@ When behaviour changes, amend the doc in the same commit — with an `⚠ AMENDE
 - **Comments explain why, not what.** The existing code is dense with rationale — a paragraph on why a lock is held, why an exit code is distinct, why a digest hashes prompts and not ids. Match that register; a comment restating the line below it is noise here.
 - Renderers never recompute; they take a `Report`. New output formats go alongside `comparison_html.py` / `comparison_csv.py`, reading the same object.
 - `results/` and `traces/` are gitignored, except that `results.jsonl` and `manifest.json` for published runs **are** committed — those are what a reader needs to check a claim. Full traces are published separately as a corpus.
-- `skills/catalog.md` is the authored skill for the `-auth` arms. Editing it after results exist invalidates the V9 pre-registration.
-- `.cursor/skills/` holds two workflow skills (`harness-field-pack` for onboarding a customer API, `harness-insights` for narrative HTML briefs). They are Cursor-format but their workflows are equally usable here.
+- `src/harness/experiment/skills/catalog.md` is the rig's authored skill for the `-auth` arms — a fixture of the experiment, not a user-facing feature. Editing it after results exist invalidates the V9 pre-registration.
+- `src/harness/agent_skills/` is the canonical source of the two client-facing workflow skills (`harness-field-pack`, `harness-insights`). They ship inside the wheel; `harness init --agent claude|cursor|both` writes them into any project, including this one. Do not check a second copy into `.cursor/` — it drifts.
+- **`skills/<api>.md` at the cwd stays a user convention**: it is where somebody testing their own API puts their authored skill.
