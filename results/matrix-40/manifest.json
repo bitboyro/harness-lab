@@ -1,0 +1,31 @@
+{
+  "created_at": "2026-08-06T20:11:24.402354+00:00",
+  "id": "matrix-40",
+  "model": "gpt-5.6-luna",
+  "provider": "openai",
+  "presets": [
+    "Z0",
+    "Z1",
+    "A1",
+    "A2",
+    "B1",
+    "B2",
+    "B1-auth",
+    "B2-auth",
+    "C1",
+    "D1",
+    "D2",
+    "D2-auth"
+  ],
+  "cores": 40,
+  "repeats": 3,
+  "seed": 1,
+  "surface_size": 50,
+  "fan_out": 8,
+  "reasoning_effort": "low",
+  "difficulty": "hard",
+  "report_class": "controlled",
+  "tasks": 230,
+  "planned": 7800,
+  "resumed": 0
+}

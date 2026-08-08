@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 from .engine import lint as lint_mod
+from .engine.analysis import RANK_KEYS as _RANK_KEYS
 from .engine.axes import (
     Caching, DocBudget, ErrorDetail, McpRevision, ResponseShape, SchemaDetail,
     preset,
@@ -301,12 +302,41 @@ def cmd_rig(args: argparse.Namespace) -> int:
     return 0
 
 
+#: Headroom left unclaimed by a matrix. On an 8GB machine macOS grows its swap
+#: file on the same volume the traces land on; filling the disk therefore does
+#: not merely fail a write, it removes the kernel's ability to page and the
+#: matrix gets SIGKILLed at 99% complete. Ask 5GB observed once, on 2026-08-06.
+_DISK_RESERVE_BYTES = 5 * 2**30
+
+#: Observed mean across matrix-40's 6189 traces. Only used for the projection.
+_TRACE_BYTES = 900_000
+
+
+def _disk_shortfall(store, planned: int) -> tuple[int, int] | None:
+    """(needed, free) if this matrix cannot fit, else None.
+
+    Eight hours of API spend should not die at 99% because nothing looked at
+    free space first.
+    """
+    import shutil
+
+    sample = [p.stat().st_size for p in
+              sorted((store.root / "traces").glob("*.json"))[-200:]]
+    per_trace = (sum(sample) / len(sample)) if sample else _TRACE_BYTES
+    need = int(planned * max(per_trace, 1))
+    free = shutil.disk_usage(store.root).free
+    return (need, free) if need + _DISK_RESERVE_BYTES > free else None
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     """Run the controlled rig across arms and persist everything."""
     from .engine.compute import compute
     from .engine.pricing import lookup, price_run
     from .engine.reporting import render
-    from .engine.results import ResultStore, build_row
+    from collections import Counter
+
+    from .engine.infra import FATAL, classify
+    from .engine.results import ResultStore, build_row, infra_row
     from .engine.taskpack import TaskPack
     from .experiment.domain import WorldShape, build_world, shape_for_cores
     from .experiment.rig import run_one
@@ -330,6 +360,10 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     store = ResultStore(args.out)
     done = store.completed() if args.resume else set()
+    if args.resume and (voided := store.voided()):
+        kinds = Counter(r["error_kind"] for r in voided)
+        print(f"re-running {len(voided)} runs voided by infra failure "
+              f"({', '.join(f'{k}={n}' for k, n in kinds.most_common())})")
 
     arm_specs = (
         [(f"{a}@{v}", a, {"error_detail": ErrorDetail(v)}) for a in presets
@@ -358,6 +392,13 @@ def cmd_run(args: argparse.Namespace) -> int:
                                      output_tokens=1_500).total_usd
     print(f"{len(planned)} runs — {len(presets)} arms x {len(tasks)} tasks "
           f"x {args.repeats} repeats. Rough projection ${rough:,.2f}")
+    if (short := _disk_shortfall(store, len(planned))) is not None:
+        need, free = short
+        print(f"\nnot enough disk: {len(planned)} runs need ~{need / 2**30:.1f} GB "
+              f"of traces, {free / 2**30:.1f} GB free (plus 5 GB reserved so the "
+              f"machine can still swap).\nFree space or move --out to another "
+              f"volume, then re-run with --resume.")
+        return 1
     if not args.yes and not _confirm():
         print("aborted")
         return 1
@@ -402,36 +443,48 @@ def cmd_run(args: argparse.Namespace) -> int:
         )
         return label, task, repeat, trace, grade
 
-    with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
-        futures = {pool.submit(execute, item): item for item in planned}
-        try:
-            for future in as_completed(futures):
-                label, arm, overrides, task, repeat = futures[future]
-                done_count += 1
-                try:
-                    label, task, repeat, trace, grade = future.result()
-                    row = build_row(arm=label, task=task, repeat=repeat,
-                                    trace=trace, grade=grade,
-                                    metrics=compute(trace),
-                                    report_class=str(pack.pack.report_class),
-                                    seed=args.seed)
-                    # One writer at a time: the ledger is appended per run so a
-                    # matrix that dies leaves what it finished, and interleaved
-                    # writes would corrupt exactly that guarantee.
-                    with write_lock:
-                        store.record(row, trace)
-                    status = "truncated" if trace.truncated else str(grade.outcome)
-                    detail = f"{len(trace.turns)}t"
-                except Exception as e:  # noqa: BLE001 — one bad run is data
-                    status, detail = "ERROR", f"{type(e).__name__}: {str(e)[:40]}"
-                print(f"  {_progress(done_count, len(planned), started_at)} "
-                      f"{label:<12} {task.id:<26} {status:<15} {detail}",
-                      # Unbuffered: redirected to a file, Python buffers stdout
-                      # and the log lags minutes behind the run.
-                      flush=True)
-        except KeyboardInterrupt:
-            print("\ninterrupted — results so far are on disk; --resume continues")
-            pool.shutdown(wait=False, cancel_futures=True)
+    pool = ThreadPoolExecutor(max_workers=args.concurrency)
+    futures = {pool.submit(execute, item): item for item in planned}
+    try:
+        for future in as_completed(futures):
+            label, arm, overrides, task, repeat = futures[future]
+            done_count += 1
+            try:
+                label, task, repeat, trace, grade = future.result()
+                row = build_row(arm=label, task=task, repeat=repeat,
+                                trace=trace, grade=grade,
+                                metrics=compute(trace),
+                                report_class=str(pack.pack.report_class),
+                                seed=args.seed)
+                # One writer at a time: the ledger is appended per run so a
+                # matrix that dies leaves what it finished, and interleaved
+                # writes would corrupt exactly that guarantee.
+                with write_lock:
+                    store.record(row, trace)
+                status = "truncated" if trace.truncated else str(grade.outcome)
+                detail = f"{len(trace.turns)}t"
+            except Exception as e:  # noqa: BLE001 — one bad run is data
+                status, detail = "ERROR", f"{type(e).__name__}: {str(e)[:40]}"
+            print(f"  {_progress(done_count, len(planned), started_at)} "
+                  f"{label:<12} {task.id:<26} {status:<15} {detail}",
+                  # Unbuffered: redirected to a file, Python buffers stdout
+                  # and the log lags minutes behind the run.
+                  flush=True)
+    except KeyboardInterrupt:
+        # cancel_futures empties the queue, but the workers already inside a
+        # provider call cannot be interrupted — and both the executor's
+        # __exit__ and threading's atexit hook join them, so a normal return
+        # stalls for a full call and the impatient second Ctrl-C lands inside
+        # t.join() as a traceback. Leaving the process outright is safe here
+        # because the ledger is appended per run under write_lock: holding it
+        # means no run is halfway through a line.
+        pool.shutdown(wait=False, cancel_futures=True)
+        print("\ninterrupted — results so far are on disk; --resume continues.\n"
+              f"summary of what finished: harness report {args.out}", flush=True)
+        sys.stdout.flush()
+        with write_lock:
+            os._exit(130)
+    pool.shutdown(wait=True)
 
     print()
     final = _build_report(store)
@@ -446,7 +499,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
-def _build_report(store, *, mde_pp: float | None = None):
+def _build_report(store, *, mde_pp: float | None = None,
+                  weights: dict[str, float] | None = None):
     """One analysis object for every renderer.
 
     The MDE is computed here and passed in: power lives in `experiment` and the
@@ -462,7 +516,8 @@ def _build_report(store, *, mde_pp: float | None = None):
                              repeats=int(manifest.get("repeats", 1))).mde_pp
         except Exception:  # noqa: BLE001 — a missing MDE only drops one banner
             mde_pp = None
-    return Report(rows=list(store.rows()), manifest=manifest, mde_pp=mde_pp)
+    return Report(rows=list(store.rows()), manifest=manifest, mde_pp=mde_pp,
+                  weights=weights)
 
 
 def cmd_progress(args: argparse.Namespace) -> int:
@@ -488,14 +543,23 @@ def cmd_report(args: argparse.Namespace) -> int:
         print(f"no results in {args.results}")
         return 1
 
-    report = _build_report(store)
+    weights = None
+    if args.weights:
+        from .engine.winner import WeightError, parse_weights
+        try:
+            weights = parse_weights(args.weights)
+        except WeightError as e:
+            print(f"--weights: {e}")
+            return 2
+
+    report = _build_report(store, weights=weights)
 
     if args.html or args.charts:
         from .engine.html import build_charts, standalone_html
         if args.html:
             out = Path(args.html)
             out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(standalone_html(report), encoding="utf-8")
+            out.write_text(standalone_html(report, args.sort), encoding="utf-8")
             print(f"wrote {out}")
         if args.charts:
             charts_dir = Path(args.charts)
@@ -516,7 +580,7 @@ def cmd_report(args: argparse.Namespace) -> int:
         return 0
 
     print(render(rows, store.manifest(), report=report,
-                 glossary=args.glossary))
+                 glossary=args.glossary, sort=args.sort))
     from .engine.stats import analyse as analyse_stats
     stats = analyse_stats(report)
     if stats.contrasts:
@@ -638,6 +702,13 @@ def build_parser() -> argparse.ArgumentParser:
                           help="write a self-contained HTML report")
     report_p.add_argument("--charts", metavar="DIR",
                           help="write each chart as a standalone .svg")
+    report_p.add_argument("--sort", default="score", choices=sorted(_RANK_KEYS),
+                          help="rank arms by this dimension (default: score)")
+    report_p.add_argument("--weights", metavar="SPEC",
+                          help="composite weights, e.g. "
+                               "'success=.35,abstention=.15,harm=.25,cost=.15,"
+                               "time=.10'. Unnamed dimensions are dropped, not "
+                               "defaulted")
     report_p.set_defaults(func=cmd_report)
 
     plan_p = sub.add_parser("plan", help="cost projection and approval")

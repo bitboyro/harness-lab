@@ -121,10 +121,17 @@ needed — the server's `tools/list` is the surface.
 ```
 Parametric baseline (Z0): 83% of tasks answered with no access to the API at all.
 
-  arm         success    lift   turns  arg-valid   static
-  Z0              83%     +0%       1        n/a        0
-  A1              67%    -17%       3       100%    1,961
-  A2              80%     -3%       5       100%      155
+  WINNER: A2 · MCP, discovery    score 0.71
+
+    arm                        success   abstain   harm  cost/succ   secs  SCORE
+    A2 · MCP, discovery            80%       75%     0%    $0.0130   25.8   0.71
+    A1 · MCP, all tools            67%       50%     8%    $0.0056   17.6   0.34
+    Z0 · No tools †                83%      100%     0%    $0.0007    2.8     --
+    weights: success 0.35  abstention 0.15  harm 0.25  cost 0.15  time 0.10
+    † control, not a shippable packaging — excluded from scoring
+
+    A1 fabricates more than A2: it correctly declined 50% of unanswerable
+    tasks against 75%.
 ```
 
 **The baseline is the point.** `Z0` runs your tasks with **no tools at all**. If
@@ -134,6 +141,23 @@ tools have to beat that to be worth having.
 The example above is real: both packagings scored **below** the no-tools
 baseline. Raw success would have read "A1 got 67%, not bad". Lift says the tools
 made it worse.
+
+**On the winner.** Five dimensions — success, abstention, harm, cost, time —
+each rescaled across the arms and weighted (safety 0.40 combined, thrift 0.25).
+Override with `--weights harm=1` to see the safety ranking alone; unnamed
+dimensions are dropped, not defaulted. Sort any column with `--sort cost`, or by
+clicking the heading in the HTML.
+
+Controls never win: `Z0` has no tools and `Z1` is handed the answers, so neither
+is a packaging you could ship. And the score is a *shortlisting* tool — the
+verdict always prints whether the leader's lead is bigger than what your sample
+size can detect, refuses to pick on an exact tie, and says so when the winner
+harms or fabricates more than its runner-up.
+
+**Abstention is scored separately from success** because correct refusals, while
+already counted as successes, are diluted: if 15% of your tasks are unanswerable,
+an arm that invents an answer for every one of them loses at most 15 points of
+success rate. That is nowhere near the weight the failure deserves.
 
 If Z0 scores high on your API, that is not a bug — it is the most useful thing
 the probe will tell you, and it means your task set needs questions whose

@@ -43,6 +43,9 @@ class Outcome(StrEnum):
     TRUNCATED = "truncated"
     #: No grade defined; gold-free metrics only.
     UNGRADED = "ungraded"
+    #: The harness, provider or machine broke — not the arm. Excluded from every
+    #: rate, and re-run rather than skipped on `--resume`.
+    INFRA_ERROR = "infra-error"
 
     @property
     def is_success(self) -> bool:
@@ -74,6 +77,11 @@ class GradeResult:
 
 def grade(task: Task, trace: Trace) -> GradeResult:
     """Grade one run. Blind to the arm by construction — it is not passed one."""
+    # Checked before everything else: an infra death is not a measurement of
+    # this arm, so it must not become a wrong answer, a refusal or a truncation.
+    if trace.error_kind:
+        return GradeResult(Outcome.INFRA_ERROR,
+                           f"infra error ({trace.error_kind}): {trace.error}")
     if trace.truncated:
         return GradeResult(Outcome.TRUNCATED, "ran out of turns")
     if trace.error:

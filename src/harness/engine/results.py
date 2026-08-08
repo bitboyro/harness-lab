@@ -18,13 +18,14 @@ Contract: docs/harness-benchmark-spec.md §6.4
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
 from .axes import axis_summary
-from .grader import GradeResult
+from .grader import GradeResult, Outcome
+from .infra import RETRYABLE, ErrorKind, classify
 from .trace import Trace
 
 LEDGER = "results.jsonl"
@@ -52,6 +53,11 @@ class Row:
     forbidden_attempts: int
     truncated: bool
     error: str | None
+    #: Why the run died, when it died for reasons outside the arm under test.
+    #: `None` next to a non-null `error` means the arm genuinely failed and the
+    #: row is real data. Anything else means the row is void: excluded from
+    #: every rate, and re-run rather than skipped by `--resume`.
+    error_kind: str | None
     wall_clock_seconds: float
     input_tokens: int
     cached_input_tokens: int
@@ -108,14 +114,33 @@ class ResultStore:
         return json.loads(path.read_text()) if path.exists() else {}
 
     def record(self, row: Row, trace: Trace | None = None) -> None:
+        """Persist one run. The row always lands, even if the trace cannot.
+
+        The trace is written first so that a failure to write it can be folded
+        into the row before the row is committed. Losing a 900KB trace costs us
+        recomputable detail; losing the row costs us the run itself, and a cell
+        that is absent from the ledger is indistinguishable from one that was
+        never scheduled.
+        """
+        if trace is not None:
+            try:
+                trace.write(self.root / TRACES)
+            except Exception as e:  # noqa: BLE001 — the row matters more
+                kind = classify(e) or ErrorKind.UNKNOWN
+                row = replace(
+                    row,
+                    outcome=str(Outcome.INFRA_ERROR),
+                    detail=f"trace unwritable ({kind}): {type(e).__name__}: {e}"[:300],
+                    error=f"{type(e).__name__}: {e}",
+                    error_kind=str(kind),
+                )
         with (self.root / LEDGER).open("a") as ledger:
             ledger.write(row.to_json() + "\n")
-        if trace is not None:
-            trace.write(self.root / TRACES)
 
     # ---- reading ---------------------------------------------------------
 
-    def rows(self) -> Iterator[dict[str, Any]]:
+    def raw_rows(self) -> Iterator[dict[str, Any]]:
+        """Every line as written, superseded rows included. Audit only."""
         path = self.root / LEDGER
         if not path.exists():
             return
@@ -123,9 +148,37 @@ class ResultStore:
             if line.strip():
                 yield json.loads(line)
 
+    def rows(self) -> Iterator[dict[str, Any]]:
+        """One row per cell, newest wins.
+
+        A `--resume` re-runs cells whose only row was an infra failure, so the
+        same (arm, task, repeat) can legitimately appear twice. The ledger stays
+        append-only — that is the durability guarantee this whole module is
+        built around — and the duplicate is resolved here instead, keeping the
+        superseded row on disk as evidence of what the machine did.
+        """
+        latest: dict[tuple[str, str, int], dict[str, Any]] = {}
+        for row in self.raw_rows():
+            latest[(row["arm"], row["task_id"], row["repeat"])] = row
+        return iter(latest.values())
+
     def completed(self) -> set[tuple[str, str, int]]:
-        """(arm, task, repeat) already done — so a resumed run skips them."""
-        return {(r["arm"], r["task_id"], r["repeat"]) for r in self.rows()}
+        """(arm, task, repeat) already done — so a resumed run skips them.
+
+        Infra failures do not count as done. They measured the disk or the API
+        key, not the arm, so a resume must re-run them rather than preserve a
+        fake result forever. This is the difference between `--resume` meaning
+        "finish the matrix" and "finish the matrix except the broken parts".
+        """
+        return {
+            (r["arm"], r["task_id"], r["repeat"])
+            for r in self.rows()
+            if r.get("error_kind") not in RETRYABLE
+        }
+
+    def voided(self) -> list[dict[str, Any]]:
+        """Rows a resume would re-run, so the CLI can say so before spending."""
+        return [r for r in self.rows() if r.get("error_kind") in RETRYABLE]
 
     def pooling_keys(self) -> set[tuple]:
         """Distinct worlds present. More than one means the rows must not be
@@ -169,6 +222,7 @@ def build_row(
         forbidden_attempts=sum(1 for c in trace.calls if c.forbidden),
         truncated=trace.truncated,
         error=trace.error,
+        error_kind=trace.error_kind,
         wall_clock_seconds=round(trace.wall_clock_seconds, 3),
         input_tokens=usage.input_tokens,
         cached_input_tokens=usage.cached_input_tokens,
@@ -185,4 +239,61 @@ def build_row(
         surface_size=trace.variant.surface_size,
         metrics={k: v.value for k, v in metrics.items() if not k.startswith("_")},
         axes=axis_summary(trace.variant),
+    )
+
+
+def infra_row(
+    *,
+    arm: str,
+    task,
+    repeat: int,
+    exc: BaseException,
+    report_class: str,
+    seed: int,
+    model: str,
+    surface_size: int,
+) -> Row:
+    """A row for a cell that blew up outside the agent loop.
+
+    `AgentRunner.run` catches its own exceptions, so anything reaching the
+    matrix driver failed in metrics, row assembly or persistence — after the
+    provider was already paid. Previously that was printed and dropped, which
+    is how 1380 cells vanished from `matrix-40` leaving no trace but terminal
+    scrollback. The run is void either way; it just has to be a *visible* void
+    so `--resume` can find it and the report can count it.
+    """
+    kind = classify(exc) or ErrorKind.UNKNOWN
+    message = f"{type(exc).__name__}: {exc}"
+    return Row(
+        run_id=f"lost-{arm}-{task.id}-{repeat}",
+        arm=arm,
+        task_id=task.id,
+        core_id=getattr(task, "core_id", None),
+        task_class=str(getattr(task, "task_class", "unknown")),
+        answerable=bool(getattr(task, "answerable", True)),
+        repeat=repeat,
+        outcome=str(Outcome.INFRA_ERROR),
+        detail=f"lost before persistence ({kind}): {message}"[:300],
+        confident=False,
+        clobbered=(),
+        turns=0,
+        calls=0,
+        forbidden_attempts=0,
+        truncated=False,
+        error=message,
+        error_kind=str(kind),
+        wall_clock_seconds=0.0,
+        input_tokens=0,
+        cached_input_tokens=0,
+        output_tokens=0,
+        reasoning_tokens=0,
+        static_tokens=0,
+        per_call_overhead_tokens=0,
+        session_setup_tokens=0,
+        model=model,
+        mcp_spec_revision=None,
+        skill_condition="none",
+        report_class=report_class,
+        seed=seed,
+        surface_size=surface_size,
     )

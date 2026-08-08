@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>matrix-10 — what the numbers mean</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1c2421;
+    --ink-soft: #3d4a45;
+    --muted: #6b7872;
+    --paper: #f3f0e8;
+    --paper-2: #e8e4d8;
+    --line: #d4cfc0;
+    --accent: #0f6e56;
+    --accent-soft: #d8efe6;
+    --warn: #9a4e12;
+    --warn-soft: #f3e4d4;
+    --danger: #9b2c2c;
+    --danger-soft: #f3d9d6;
+    --bar: #1a5c4a;
+    --bar-muted: #b7c4be;
+    --max: 720px;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font: 400 17px/1.65 Outfit, system-ui, sans-serif;
+    background:
+      radial-gradient(1200px 600px at 12% -10%, #dff0e8 0%, transparent 55%),
+      radial-gradient(900px 500px at 100% 8%, #efe6d4 0%, transparent 50%),
+      var(--paper);
+    min-height: 100vh;
+  }
+
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 48px 22px 96px; }
+
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: Fraunces, Georgia, serif;
+    font-weight: 650;
+    font-size: clamp(2rem, 5vw, 2.75rem);
+    line-height: 1.12;
+    letter-spacing: -0.025em;
+    margin: 0 0 18px;
+  }
+
+  .lede {
+    font-size: 1.15rem;
+    color: var(--ink-soft);
+    max-width: 38em;
+    margin: 0 0 28px;
+  }
+
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 8px 18px;
+    font-size: 13px; color: var(--muted);
+    padding-bottom: 36px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 40px;
+  }
+
+  .verdict {
+    background: var(--accent-soft);
+    border-left: 4px solid var(--accent);
+    padding: 22px 24px;
+    margin: 0 0 48px;
+    border-radius: 0 10px 10px 0;
+  }
+  .verdict h2 {
+    font-family: Fraunces, Georgia, serif;
+    font-size: 1.35rem;
+    font-weight: 650;
+    margin: 0 0 8px;
+    letter-spacing: -0.015em;
+  }
+  .verdict p { margin: 0; color: var(--ink-soft); }
+  .verdict .why {
+    margin-top: 12px;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+  }
+
+  .picks {
+    display: grid;
+    gap: 14px;
+    margin: 0 0 48px;
+  }
+  .pick {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px 22px 18px;
+    background: color-mix(in oklab, white 55%, var(--paper));
+  }
+  .pick.careful {
+    border-color: color-mix(in oklab, var(--accent) 35%, var(--line));
+    background: color-mix(in oklab, var(--accent-soft) 70%, white);
+  }
+  .pick .job {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 6px;
+  }
+  .pick.careful .job { color: var(--accent); }
+  .pick h3 {
+    font-family: Fraunces, Georgia, serif;
+    font-size: 1.25rem;
+    font-weight: 650;
+    margin: 0 0 6px;
+    letter-spacing: -0.015em;
+  }
+  .pick .arm {
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .pick .stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin: 10px 0 12px;
+    font-size: 0.88rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-soft);
+  }
+  .pick .stats b { color: var(--ink); font-weight: 600; }
+  .pick p {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+    line-height: 1.5;
+  }
+  .pick .caveat {
+    margin-top: 10px;
+    font-size: 0.88rem;
+    color: var(--warn);
+  }
+
+  section { margin: 0 0 52px; }
+  section h2 {
+    font-family: Fraunces, Georgia, serif;
+    font-size: 1.45rem;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    margin: 0 0 10px;
+  }
+  section > p {
+    color: var(--ink-soft);
+    margin: 0 0 20px;
+    max-width: 40em;
+  }
+
+  .insight {
+    display: grid;
+    gap: 18px;
+    margin: 0 0 22px;
+  }
+  .insight article {
+    padding: 20px 0;
+    border-top: 1px solid var(--line);
+  }
+  .insight article:first-child { border-top: none; padding-top: 0; }
+  .insight h3 {
+    font-family: Fraunces, Georgia, serif;
+    font-size: 1.15rem;
+    font-weight: 650;
+    margin: 0 0 8px;
+    letter-spacing: -0.015em;
+  }
+  .insight p { margin: 0; color: var(--ink-soft); }
+  .insight .fig {
+    display: inline-block;
+    font-family: Fraunces, Georgia, serif;
+    font-weight: 650;
+    font-size: 1.05rem;
+    color: var(--accent);
+    margin-right: 4px;
+  }
+
+  .ladder {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .ladder li {
+    display: grid;
+    grid-template-columns: 7.5rem 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.95rem;
+  }
+  .ladder li:first-child { border-top: 1px solid var(--line); }
+  .ladder .name { font-weight: 600; }
+  .ladder .desc { color: var(--muted); font-size: 0.82rem; }
+  .ladder .track {
+    height: 8px;
+    background: var(--paper-2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .ladder .fill {
+    height: 100%;
+    background: var(--bar);
+    border-radius: 3px;
+  }
+  .ladder .fill.muted { background: var(--bar-muted); }
+  .ladder .pct {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    min-width: 2.6rem;
+    text-align: right;
+  }
+  .ladder .win .name { color: var(--accent); }
+  .ladder .ctl .name, .ladder .ctl .pct { color: var(--muted); font-weight: 500; }
+
+  .deltas {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin-top: 8px;
+  }
+  .delta {
+    background: color-mix(in oklab, white 55%, var(--paper));
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 16px 14px;
+  }
+  .delta .label { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+  .delta .num {
+    font-family: Fraunces, Georgia, serif;
+    font-size: 1.7rem;
+    font-weight: 650;
+    color: var(--accent);
+    margin: 4px 0 2px;
+    letter-spacing: -0.02em;
+  }
+  .delta p { margin: 0; font-size: 0.88rem; color: var(--ink-soft); line-height: 1.45; }
+
+  .callout {
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin: 18px 0 0;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+  }
+  .callout.warn { background: var(--warn-soft); border-left: 3px solid var(--warn); }
+  .callout.danger { background: var(--danger-soft); border-left: 3px solid var(--danger); }
+  .callout strong { color: var(--ink); font-weight: 600; }
+
+  .fail-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .fail-list li {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+    align-items: baseline;
+  }
+  .fail-list .n {
+    font-family: Fraunces, Georgia, serif;
+    font-weight: 650;
+    font-size: 1.25rem;
+    color: var(--ink);
+    min-width: 1.5rem;
+  }
+  .fail-list .t { font-weight: 600; margin: 0 0 2px; }
+  .fail-list .h { margin: 0; font-size: 0.9rem; color: var(--muted); }
+
+  .takeaways {
+    background: color-mix(in oklab, white 50%, var(--paper));
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 22px 24px;
+  }
+  .takeaways ol {
+    margin: 0;
+    padding-left: 1.2rem;
+    color: var(--ink-soft);
+  }
+  .takeaways li { margin: 0 0 12px; padding-left: 4px; }
+  .takeaways li:last-child { margin-bottom: 0; }
+  .takeaways strong { color: var(--ink); }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  footer a { color: var(--accent); }
+
+  @media (max-width: 560px) {
+    .ladder li { grid-template-columns: 1fr auto; grid-template-rows: auto auto; }
+    .ladder .track { grid-column: 1 / -1; order: 3; }
+    .ladder .pct { order: 2; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="eyebrow">Harness lab · matrix-10</p>
+  <h1>Packaging the Catalog API: what actually moved the needle</h1>
+  <p class="lede">
+    Twelve ways to hand the same media catalog to the same model.
+    The winner is not the richest tool set — it is a code sandbox plus a short,
+    hand-written skill that teaches the hierarchy, the dangerous writes, and when to refuse.
+  </p>
+  <div class="meta">
+    <span>gpt-5.6-luna · reasoning low</span>
+    <span>58 tasks · 2 repeats · hard</span>
+    <span>1,312 runs · Aug 6, 2026</span>
+  </div>
+
+  <div class="verdict">
+    <h2>Ship D2-auth — code sandbox + authored skill</h2>
+    <p>
+      <strong>84%</strong> success · <strong>100%</strong> correct refusals ·
+      <strong>0</strong> data clobbers · about half the tokens of bare MCP.
+    </p>
+    <p class="why">
+      On accuracy alone it ties the next-best packaging (D1, 78%) — that 6&nbsp;pp gap
+      is below this run’s 23&nbsp;pp detection floor. It wins the composite because it
+      never invents answers on unanswerable tasks and never destroys fields with a
+      careless <code>replace_episode</code>.
+    </p>
+  </div>
+
+  <section>
+    <h2>Three jobs, three picks</h2>
+    <p>
+      Same model, different packaging. Choose by what you optimise for —
+      not by the composite score alone.
+    </p>
+    <div class="picks">
+      <article class="pick careful">
+        <p class="job">When you must not be wrong</p>
+        <h3><span class="arm">D2-auth</span> — precision over everything</h3>
+        <div class="stats">
+          <span><b>100%</b> precision</span>
+          <span><b>100%</b> abstention</span>
+          <span><b>0</b> false answers</span>
+          <span><b>0</b> clobbers</span>
+          <span><b>84%</b> success</span>
+        </div>
+        <p>
+          Money and latency do not matter here. Among packaging arms, only D2-auth
+          is perfect on both axes that measure “making something up”: it never
+          invents an answer when the catalog cannot provide one, and it never
+          wipes a title or runtime with <code>replace_episode</code>.
+          B1-auth and B2-auth also hit 100% precision, but both still clobbered
+          data (6 and 1 times). If the cost of a wrong write is catastrophic,
+          this is the one you’d ship.
+        </p>
+      </article>
+
+      <article class="pick">
+        <p class="job">When wall-clock is the constraint</p>
+        <h3><span class="arm">B1</span> — fastest packaging</h3>
+        <div class="stats">
+          <span><b>15.3&nbsp;s</b> mean</span>
+          <span><b>67%</b> success</span>
+          <span><b>3</b> false positives</span>
+          <span><b>2</b> clobbers</span>
+        </div>
+        <p>
+          Eager-all MCP with a generated skill finishes first — about 11&nbsp;s
+          faster than D2-auth. Schemas are already in context, so there is no
+          discovery tax and almost no sandbox setup.
+        </p>
+        <p class="caveat">
+          You pay for that speed: lower accuracy, occasional fabricated answers,
+          and real write damage. If you need fast <em>and</em> careful, B1-auth
+          is only ~1&nbsp;s slower (16.4&nbsp;s) with perfect abstention — but still
+          clobbers.
+        </p>
+      </article>
+
+      <article class="pick">
+        <p class="job">Cheapest among real packaging (excl. Z)</p>
+        <h3><span class="arm">B1-auth</span> — lowest $/success</h3>
+        <div class="stats">
+          <span><b>$0.0034</b> / success</span>
+          <span><b>75%</b> success</span>
+          <span><b>100%</b> abstention</span>
+          <span><b>16.4&nbsp;s</b></span>
+        </div>
+        <p>
+          Controls Z0/Z1 are excluded — they are baselines, not products.
+          Among arms that actually call the API, B1-auth is the cheapest per
+          solved task: all tools loaded once, authored skill keeping refusals
+          clean, no sandbox overhead. D2-auth costs ~30% more per success
+          ($0.0044) in exchange for zero harm.
+        </p>
+        <p class="caveat">
+          Cheap is not safe. Six episodes still lost fields to replace.
+          Budget-optimised packaging is not the same as production packaging.
+        </p>
+      </article>
+    </div>
+  </section>
+
+  <section>
+    <h2>Four findings that matter</h2>
+    <p>Everything else in the full report is detail. These four explain the ranking.</p>
+
+    <div class="insight">
+      <article>
+        <h3>1. The authored skill’s real gift is knowing when <em>not</em> to answer</h3>
+        <p>
+          Swapping a generated skill for the hand-written Catalog skill lifts success
+          a modest <span class="fig">+7 to +10&nbsp;pp</span>.
+          Abstention on unanswerable tasks jumps far more:
+          B1 <span class="fig">44% → 94%</span>,
+          D2 <span class="fig">56% → 100%</span>.
+          The skill’s last section — “say it cannot be determined rather than offering
+          the closest match” — is doing more work than the hop-by-hop lookup tips.
+        </p>
+      </article>
+
+      <article>
+        <h3>2. Discovery meta-tools tax the turn budget before work begins</h3>
+        <p>
+          Arms that must <code>search → describe → invoke</code> (A2, B2, B2-auth)
+          truncate on <span class="fig">18–29%</span> of runs.
+          Eager-all MCP truncates ~5%; code and bash arms truncate <span class="fig">0%</span>.
+          Discovery is not free exploration — it spends the same turn budget the task needs,
+          so many “failures” never get a chance to be wrong.
+        </p>
+      </article>
+
+      <article>
+        <h3>3. Harm has a fingerprint: PUT wiped the object</h3>
+        <p>
+          Almost every clobber zeroes <code>title</code> or <code>runtime_seconds</code> —
+          the signature of <code>replace_episode</code> instead of <code>patch_episode</code>.
+          The Catalog skill warns about this explicitly. Code-sandbox arms nearly eliminate it
+          (D2-auth: zero harm). Full-tool MCP still does it even <em>with</em> the authored skill
+          (B1-auth: 6 clobbers) — having the dangerous tool in the schema outweighs the prose warning.
+        </p>
+      </article>
+
+      <article>
+        <h3>4. Intermediate results in a sandbox beat more tools in context</h3>
+        <p>
+          Successful D2-auth runs use ~<span class="fig">6k</span> peak context tokens and ~5 calls.
+          Bare MCP (A1) needs ~<span class="fig">14k</span> tokens and ~11 calls for worse accuracy.
+          Keeping state in code, not in the chat, is the efficiency story — not “more documentation.”
+        </p>
+      </article>
+    </div>
+  </section>
+
+  <section>
+    <h2>Success ladder</h2>
+    <p>
+      Share of scored runs that passed or correctly refused.
+      Controls are muted: Z0 has no tools; Z1 is handed the answers (reads only, incomplete).
+    </p>
+    <ul class="ladder">
+      <li class="win">
+        <div><div class="name">D2-auth</div><div class="desc">sandbox + authored</div></div>
+        <div class="track"><div class="fill" style="width:84%"></div></div>
+        <div class="pct">84%</div>
+      </li>
+      <li class="ctl">
+        <div><div class="name">Z1 †</div><div class="desc">answers handed over</div></div>
+        <div class="track"><div class="fill muted" style="width:83%"></div></div>
+        <div class="pct">83%</div>
+      </li>
+      <li>
+        <div><div class="name">D1</div><div class="desc">sandbox alone</div></div>
+        <div class="track"><div class="fill" style="width:78%"></div></div>
+        <div class="pct">78%</div>
+      </li>
+      <li>
+        <div><div class="name">B1-auth</div><div class="desc">all tools + authored</div></div>
+        <div class="track"><div class="fill" style="width:75%"></div></div>
+        <div class="pct">75%</div>
+      </li>
+      <li>
+        <div><div class="name">C1</div><div class="desc">bash + docs</div></div>
+        <div class="track"><div class="fill" style="width:74%"></div></div>
+        <div class="pct">74%</div>
+      </li>
+      <li>
+        <div><div class="name">D2</div><div class="desc">sandbox + generated</div></div>
+        <div class="track"><div class="fill" style="width:73%"></div></div>
+        <div class="pct">73%</div>
+      </li>
+      <li>
+        <div><div class="name">B2-auth</div><div class="desc">discovery + authored</div></div>
+        <div class="track"><div class="fill" style="width:69%"></div></div>
+        <div class="pct">69%</div>
+      </li>
+      <li>
+        <div><div class="name">B1</div><div class="desc">all tools + generated</div></div>
+        <div class="track"><div class="fill" style="width:67%"></div></div>
+        <div class="pct">67%</div>
+      </li>
+      <li>
+        <div><div class="name">A1 / A2</div><div class="desc">MCP, no skill</div></div>
+        <div class="track"><div class="fill" style="width:64%"></div></div>
+        <div class="pct">~64%</div>
+      </li>
+      <li class="ctl">
+        <div><div class="name">Z0 †</div><div class="desc">no tools</div></div>
+        <div class="track"><div class="fill muted" style="width:16%"></div></div>
+        <div class="pct">16%</div>
+      </li>
+    </ul>
+    <div class="callout warn">
+      <strong>Read lift, not absolute success.</strong>
+      Tools add roughly +47 to +68&nbsp;pp over Z0. Every packaging arm clears the
+      minimum detectable effect against the no-tool baseline. Differences
+      <em>between</em> top packaging arms mostly do not.
+    </div>
+  </section>
+
+  <section>
+    <h2>What the authored skill changes</h2>
+    <p>Same packaging family, skill swapped from generated (or none) to the Catalog skill.</p>
+    <div class="deltas">
+      <div class="delta">
+        <div class="label">Success</div>
+        <div class="num">+7–10 pp</div>
+        <p>Modest. The model already reaches many answerable tasks without authored prose.</p>
+      </div>
+      <div class="delta">
+        <div class="label">Abstention</div>
+        <div class="num">+38–44 pp</div>
+        <p>The decisive shift. Fabricated answers disappear when the skill is authored.</p>
+      </div>
+      <div class="delta">
+        <div class="label">False positives</div>
+        <div class="num">→ 0</div>
+        <p>Authored MCP and D2-auth invent nothing on unanswerable tasks. Generated skills still do.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Where D2-auth still fails</h2>
+    <p>
+      Nineteen misses out of 116 — none of them refusals-gone-wrong or clobbers.
+      The residual is execution, not packaging philosophy.
+    </p>
+    <ul class="fail-list">
+      <li>
+        <div class="n">5</div>
+        <div>
+          <p class="t">Missed archive</p>
+          <p class="h">Irreversible write never applied — scope caution without a dry-run follow-through.</p>
+        </div>
+      </li>
+      <li>
+        <div class="n">4</div>
+        <div>
+          <p class="t">Rating / status patch wrong or skipped</p>
+          <p class="h">Safe writes that should be a single <code>patch_episode</code>.</p>
+        </div>
+      </li>
+      <li>
+        <div class="n">4</div>
+        <div>
+          <p class="t">Wrong read answer</p>
+          <p class="h">Hierarchy walk completed; the extracted value was off (e.g. year).</p>
+        </div>
+      </li>
+      <li>
+        <div class="n">2</div>
+        <div>
+          <p class="t">Incomplete fan-out tags</p>
+          <p class="h">Tagged some episodes in a season, not all — the skill’s “no bulk endpoint” path.</p>
+        </div>
+      </li>
+    </ul>
+    <div class="callout danger">
+      <strong>Do not read B1-auth as “almost as good.”</strong>
+      It scores 75% with perfect abstention, but still clobbered six episodes via replace.
+      For a catalog that must not lose titles and runtimes, that is a different product risk
+      than D2-auth’s nineteen clean misses.
+    </div>
+  </section>
+
+  <section>
+    <h2>What to take away</h2>
+    <div class="takeaways">
+      <ol>
+        <li>
+          <strong>For “don’t make a mistake,” ship D2-auth.</strong>
+          Perfect precision, perfect abstention, zero clobbers — the only packaging
+          that wins every safety axis at once.
+        </li>
+        <li>
+          <strong>Speed and cheapness point elsewhere, with caveats.</strong>
+          B1 is fastest; B1-auth is cheapest per success. Both still harm data
+          when replace is in the tool schema.
+        </li>
+        <li>
+          <strong>Invest in an authored skill that teaches refusal and dangerous writes</strong>,
+          not a generated dump of every endpoint. Abstention is where the authored skill pays off.
+        </li>
+        <li>
+          <strong>If you must expose write tools eagerly, hide or rename <code>replace_*</code>.</strong>
+          Prose warnings do not reliably override a tempting PUT in the schema.
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <footer>
+    Source: <a href="./report.html">full matrix-10 report</a> ·
+    manifest <code>matrix-10</code> · model gpt-5.6-luna ·
+    MDE ≈ 23&nbsp;pp · Z1 incomplete (36 of 116) ·
+    authored / generated / none skill conditions are not pooled in the statistical report.
+    This brief is a narrative reading of those results, not a substitute for the intervals.
+  </footer>
+
+</div>
+</body>
+</html>

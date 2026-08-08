@@ -82,6 +82,9 @@ class Trace:
     state_before: Any = None
     state_after: Any = None
     error: str | None = None
+    #: Set when `error` was infra, not experiment signal — see engine/infra.py.
+    #: `None` alongside a non-null `error` means the arm genuinely failed.
+    error_kind: str | None = None
     #: Everything about how this run was configured that is not on the variant:
     #: model, sampling parameters as *actually applied*, and any the provider
     #: rejected. A run where temperature was never applied must be
@@ -137,6 +140,7 @@ class Trace:
             "truncated": self.truncated,
             "final_answer": self.final_answer,
             "error": self.error,
+            "error_kind": self.error_kind,
             "usage": asdict(self.usage_total),
             "cost": asdict(self.cost),
             "turns": [asdict(t) for t in self.turns],

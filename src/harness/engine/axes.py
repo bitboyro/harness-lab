@@ -225,6 +225,67 @@ _CONTROL_ROLE = {
           "Read tasks only: with no tools it cannot perform a write.",
 }
 
+#: The controls' short names. Same reason as `_CONTROL_ROLE`: "no transport:
+#: nothing to discover" is accurate and tells a reader nothing.
+_CONTROL_NAME = {
+    "Z0": "No tools",
+    "Z1": "Answers handed over",
+}
+
+#: Short-name fragments, one per axis value. Deliberately parallel to `_MEANING`
+#: — the long description and the short name are two renderings of the same
+#: assignment, and neither is written down per preset.
+_NAME_PART = {
+    "transport": {
+        Transport.MCP: "MCP",
+        Transport.HTTP_REST: "Bash",
+        Transport.IN_PROCESS: "In-process",
+        Transport.NONE: "No tools",
+    },
+    "discovery": {
+        Discovery.EAGER_ALL: ", all tools",
+        Discovery.META_TOOLS: ", discovery",
+        Discovery.CODE_FS: " sandbox",
+        Discovery.RETRIEVAL: ", retrieved",
+        Discovery.DOCS: "",
+        Discovery.NONE: "",
+    },
+    "instructions": {
+        Instructions.NONE: "",
+        Instructions.SKILL_GENERATED_FLAT: " + skill",
+        Instructions.SKILL_GENERATED_PROGRESSIVE: " + skill",
+        Instructions.SKILL_AUTHORED_FLAT: " + authored skill",
+        Instructions.SKILL_AUTHORED_PROGRESSIVE: " + authored skill",
+        Instructions.DOCS_FLAT: " + docs",
+        Instructions.DOCS_PROGRESSIVE: " + index",
+    },
+    "confirmation": {
+        Confirmation.MRTR: " + confirm",
+        Confirmation.NONE: "",
+    },
+}
+
+
+def short_name(variant: Variant) -> str:
+    """Two or three words for an arm, for use beside its code.
+
+    Derived from the axes for the same reason `describe` is: a hand-written name
+    per preset drifts the moment the preset changes, and then a chart is labelled
+    with something the run was not. `A1` on its own is unreadable; `A1 · MCP, all
+    tools` needs no legend.
+    """
+    if variant.preset in _CONTROL_NAME:
+        return _CONTROL_NAME[variant.preset]
+
+    # `code-fs` names the transport after what the model actually touches: the
+    # module tree, not the MCP server behind it.
+    head = ("Code" if variant.invocation is Invocation.CODE
+            else _NAME_PART["transport"][variant.transport])
+    return (head
+            + _NAME_PART["discovery"][variant.discovery]
+            + _NAME_PART["instructions"][variant.instructions]
+            + _NAME_PART["confirmation"][variant.confirmation])
+
 
 def describe(variant: Variant) -> str:
     """One sentence for an arm, built from its axis assignment.
@@ -267,6 +328,7 @@ def axis_summary(variant: Variant) -> dict[str, str]:
         "doc_budget": str(variant.doc_budget),
         "surface_size": str(variant.surface_size),
         "description": describe(variant),
+        "name": short_name(variant),
     }
 
 

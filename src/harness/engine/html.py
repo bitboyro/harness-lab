@@ -26,8 +26,13 @@ OUTCOME_FILLS = ("var(--ord-1)", "var(--ord-2)", "var(--ord-3)",
 
 _CSS = """
   * { box-sizing: border-box; }
-  body { margin: 0; font: 14px/1.55 ui-sans-serif, system-ui, -apple-system, sans-serif;
-         background: var(--surface-1); color: var(--text-primary); }
+  body { margin: 0; font: 14px/1.55 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+  /* The palette variables are scoped to `.viz`, so the surface has to be
+     painted there too. Putting it on `body` reads `--surface-1` from outside
+     the scope, resolves to nothing, and leaves the page white behind themed
+     content in dark mode. */
+  .viz { background: var(--surface-1); color: var(--text-primary);
+         min-height: 100vh; }
   .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 72px; }
   h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: -0.01em; }
   h2 { font-size: 15px; margin: 34px 0 10px; letter-spacing: -0.005em; }
@@ -61,7 +66,16 @@ _CSS = """
           font-variant-numeric: tabular-nums; }
   th, td { text-align: right; padding: 5px 9px; border-bottom: 1px solid var(--grid); }
   th:first-child, td:first-child { text-align: left; }
+  /* Numbers right-align so digits line up; prose does not. */
+  td.prose, th.prose { text-align: left; }
   th { color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
+  /* Click-to-sort. The affordance is the cursor plus a caret on the active
+     column — the sorted direction must be visible, or a reader cannot tell a
+     re-ordered table from the original one. */
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover, th.sortable:focus-visible { color: var(--text-primary); }
+  th[data-dir]::after { content: " ▾"; font-size: 9px; }
+  th[data-dir="asc"]::after { content: " ▴"; }
   .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
            gap: 18px; }
   .card { border: 1px solid var(--grid); border-radius: 8px; padding: 12px 14px; }
@@ -69,8 +83,27 @@ _CSS = """
   .kv { display: flex; justify-content: space-between; font-size: 11px;
         color: var(--text-secondary); padding: 2px 0; }
   .kv b { color: var(--text-primary); font-weight: 600; }
+  /* The arm's plain-language name, wherever its code appears. Muted and a size
+     down: the code is the identifier, the name is the reminder. */
+  .armname { color: var(--text-muted); font-weight: 400; font-size: 11px; }
+  .ctl { color: var(--text-muted); cursor: help; }
+  td .why { color: var(--text-muted); font-size: 11px; font-weight: 400; }
+  tr.win td { background: color-mix(in oklab, var(--status-good) 8%, var(--surface-1)); }
+  tr.win td:first-child { box-shadow: inset 2px 0 0 var(--status-good); }
+  /* Direction of merit. Text, not colour alone — a reader who cannot
+     distinguish the tint still gets "lower is better" in words. */
+  .dir { font-size: 10px; font-weight: 500; text-transform: none;
+         letter-spacing: 0; padding: 2px 7px; border-radius: 10px;
+         color: var(--text-secondary); border: 1px solid var(--grid);
+         margin-left: 6px; white-space: nowrap; }
+  .metric { margin: 18px 0 22px; }
+  .metric h3 { text-transform: none; letter-spacing: 0; font-size: 13px;
+               color: var(--text-primary); }
+  .metric p { font-size: 12px; margin-bottom: 8px; }
   details.howto { border: 1px solid var(--grid); border-radius: 8px;
                   padding: 10px 14px; margin: 14px 0 4px; }
+  details summary { cursor: pointer; color: var(--text-secondary);
+                    font-size: 12px; margin: 10px 0; }
   details.howto summary { cursor: pointer; font-weight: 600;
                           color: var(--text-primary); font-size: 13px; }
   details.howto p { margin: 10px 0 0; font-size: 13px; }
@@ -199,19 +232,39 @@ def build_charts(report: Report) -> dict[str, str]:
             title=f"{name} confusion matrix",
         )
 
-    # 7. Metrics that actually vary.
+    # 7. Metrics that actually vary, best-first on the metric's own direction so
+    #    the chart reads top-down like every other ranking on the page.
+    from .metrics import get as get_metric
     for metric in report.varying_metrics():
+        try:
+            better = get_metric(metric).better
+        except KeyError:
+            better = None
+        ordered = sorted(
+            (a for a in arms if report.arms[a].metric_mean(metric) is not None),
+            key=lambda a: report.arms[a].metric_mean(metric),
+            reverse=(better == "higher"),
+        )
         bars = [Bar(label=a, value=report.arms[a].metric_mean(metric), slot=1)
-                for a in arms]
-        if any(b.value is not None for b in bars):
+                for a in ordered]
+        if bars:
             charts[f"metric-{metric}"] = bar_chart(
                 bars, title=metric.replace("_", " "), unit="")
     return charts
 
 
-def render_html(report: Report) -> str:
+#: How many behavioural metrics get a chart and a paragraph. The rest are still
+#: shown, just in a table — a page of equally-weighted charts is how a reader
+#: ends up ignoring all of them.
+PROMOTED = 3
+
+
+def render_html(report: Report, sort: str = "score") -> str:
     charts = build_charts(report)
     arms = sorted(report.arms)
+    # One order for the whole page, so "who won" does not reset to alphabetical
+    # at every section heading.
+    order = report.ranked(sort)
     out: list[str] = []
 
     manifest = report.manifest
@@ -267,8 +320,7 @@ def render_html(report: Report) -> str:
     )
 
     # ---- what the arms are ----------------------------------------------
-    described = [(n, report.arms[n].description) for n in sorted(report.arms)
-                 if report.arms[n].description]
+    described = [a for a in order if a.description]
     if described:
         out.append("<h2>The arms</h2>")
         out.append(
@@ -277,10 +329,15 @@ def render_html(report: Report) -> str:
             "including any sweep override.</p>"
         )
         rows = "".join(
-            f"<tr><td><b>{_e(name)}</b></td><td>{_e(text)}</td></tr>"
-            for name, text in described
+            f"<tr><td><b>{_e(a.arm)}</b></td>"
+            f'<td class="prose"><b>{_e(a.name)}</b><br>'
+            f'<span class="why">{_e(a.description)}</span></td></tr>'
+            for a in described
         )
         out.append(f'<div class="scroll"><table>{rows}</table></div>')
+
+    # ---- the verdict -----------------------------------------------------
+    out.append(_verdict_section(report, order))
 
 
     # ---- charts ----------------------------------------------------------
@@ -321,16 +378,17 @@ def render_html(report: Report) -> str:
             "outcomes. The inference is exact for this grader.</p>"
         )
     out.append('<div class="grid2">')
-    for name in arms:
-        c = report.arms[name].confusion
+    for a in order:
+        name, c = a.arm, a.confusion
         if not c.total:
             continue
-        out.append(f'<div class="card"><h4>{_e(name)}</h4>')
+        out.append(f'<div class="card"><h4>{_e(name)} '
+                   f'<span class="armname">{_e(a.name)}</span></h4>')
         out.append(charts.get(f"confusion-{name}", ""))
         for label, value in (("precision", c.precision), ("recall", c.recall),
                              ("F1", c.f1), ("accuracy", c.accuracy),
                              ("balanced acc.", c.balanced_accuracy),
-                             ("specificity", c.specificity)):
+                             ("specificity — declined correctly", c.specificity)):
             out.append(f'<div class="kv"><span>{label}</span>'
                        f"<b>{_pct(value, 0) if value is not None else 'n/a'}</b></div>")
         mcc = c.mcc
@@ -367,22 +425,8 @@ def render_html(report: Report) -> str:
                    "stateless MCP moves cost from session setup to a per-call "
                    "tax that scales with call count, and a total hides that.</p>")
 
-    # ---- efficiency ------------------------------------------------------
-    varying = report.varying_metrics()
-    if varying:
-        out.append("<h2>Mechanism</h2>")
-        for metric in varying:
-            key = f"metric-{metric}"
-            if key in charts:
-                out.append(charts[key])
-    constant = report.constant_metrics()
-    if constant:
-        names = ", ".join(f"{k} = {v:g}" for k, v in constant.items())
-        out.append(f'<p class="note">No variation across any run on: {_e(names)}. '
-                   f"Charting these would imply a difference that is not there.</p>")
-    out.append('<p class="note">Every metric above is <b>unvalidated</b>: its '
-               "relationship to ground truth has not been established on the "
-               "controlled rig.</p>")
+    # ---- how each arm behaved --------------------------------------------
+    out.append(_behaviour_section(report, order, charts))
 
     # ---- contrasts -------------------------------------------------------
     from .stats import analyse as analyse_stats
@@ -420,14 +464,14 @@ def render_html(report: Report) -> str:
     # ---- tables ----------------------------------------------------------
     out.append("<h2>Details</h2>")
     out.append("<h3>Answer or abstain</h3>")
-    out.append(_confusion_table(report))
+    out.append(_confusion_table(report, order))
     out.append("<h3>Effort per run (mean)</h3>")
-    out.append(_effort_table(report))
+    out.append(_effort_table(report, order))
     out.append("<h3>Outcomes</h3>")
-    out.append(_arm_table(report))
+    out.append(_arm_table(report, order))
     if len(report.task_classes) > 1:
         out.append("<h3>Success by class</h3>")
-        out.append(_class_table(report))
+        out.append(_class_table(report, order))
     if report.error_rows:
         out.append("<h3>Harness errors</h3>")
         out.append(_error_table(report))
@@ -449,10 +493,61 @@ def render_html(report: Report) -> str:
     return (
         "<style>\n" + palette_css() + "\n" + _CSS + "\n</style>\n"
         f'<div class="viz"><div class="wrap">{body}</div></div>'
+        f"<script>{_SORT_JS}</script>"
     )
 
 
-def standalone_html(report: Report) -> str:
+#: Click-to-sort for every data table. Inline and dependency-free — the report
+#: is one self-contained file that has to work from a file:// URL with no
+#: network, so a library is not an option.
+#:
+#: Values are parsed rather than compared as strings: "$0.0062" and "12.9%" and
+#: "1,204" all sort as numbers, and "n/a" always sinks to the bottom whichever
+#: direction is chosen, because an absent value is not a small one.
+_SORT_JS = """
+(function () {
+  var NA = /^(n\\/a|—|-|)$/i;
+  function value(cell) {
+    var text = (cell.getAttribute('data-sort') || cell.textContent).trim();
+    if (NA.test(text)) return null;
+    var n = parseFloat(text.replace(/[$,%\\s,]/g, '').replace(/[^0-9.eE+-].*$/, ''));
+    return isNaN(n) ? text.toLowerCase() : n;
+  }
+  document.querySelectorAll('table').forEach(function (table) {
+    var head = table.rows[0];
+    if (!head) return;
+    Array.prototype.forEach.call(head.cells, function (th, i) {
+      th.tabIndex = 0;
+      th.classList.add('sortable');
+      function sort() {
+        var body = Array.prototype.slice.call(table.rows, 1);
+        var desc = th.getAttribute('data-dir') !== 'desc';
+        body.sort(function (a, b) {
+          var x = value(a.cells[i]), y = value(b.cells[i]);
+          if (x === null && y === null) return 0;
+          if (x === null) return 1;   // absent sinks, both directions
+          if (y === null) return -1;
+          if (typeof x === 'string' || typeof y === 'string')
+            return desc ? String(y).localeCompare(x) : String(x).localeCompare(y);
+          return desc ? y - x : x - y;
+        });
+        Array.prototype.forEach.call(head.cells, function (o) {
+          o.removeAttribute('data-dir');
+        });
+        th.setAttribute('data-dir', desc ? 'desc' : 'asc');
+        body.forEach(function (r) { table.tBodies[0].appendChild(r); });
+      }
+      th.addEventListener('click', sort);
+      th.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sort(); }
+      });
+    });
+  });
+})();
+"""
+
+
+def standalone_html(report: Report, sort: str = "score") -> str:
     """A complete document, for writing to a file.
 
     The charset declaration is not optional: served over HTTP without it, a
@@ -464,8 +559,140 @@ def standalone_html(report: Report) -> str:
         '<html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>{_e(report.run_id)} — harness results</title></head>"
-        f"<body>{render_html(report)}</body></html>"
+        f"<body>{render_html(report, sort)}</body></html>"
     )
+
+
+def _verdict_section(report: Report, order) -> str:
+    """Who won, on what, and every reason to distrust it.
+
+    Placed above the charts because it is the question the report exists to
+    answer. The caveats ship *with* the verdict rather than in a footnote: a
+    composite score will always produce a ranking, including one made entirely
+    of noise, and separating the number from its interval is how that gets
+    quoted.
+    """
+    from .winner import COLUMNS, _cell
+    from .analysis import RANK_KEYS
+
+    verdict = report.verdict()
+    out = ["<h2>The verdict</h2>"]
+    if verdict.leader is None:
+        return out[0] + f'<div class="banner">{_e(verdict.reason)}</div>'
+
+    if verdict.winner is not None:
+        champion = report.arms[verdict.winner]
+        out.append(
+            f'<div class="banner ok"><b>Winner: {_e(champion.arm)} · '
+            f"{_e(champion.name)}</b> — composite score "
+            f"{verdict.scores[verdict.winner]:.2f} across "
+            f"{len(verdict.dimensions)} weighted dimensions.</div>"
+        )
+    else:
+        tied = verdict.tied_leaders
+        out.append(
+            f'<div class="banner"><b>No winner — {len(tied)} arms tied at '
+            f"{verdict.scores[tied[0]]:.2f}</b> ({_e(', '.join(tied))}). On the "
+            f"dimensions you weighted they are indistinguishable.</div>"
+        )
+    out.append(
+        "<p>Every dimension is rescaled 0–1 across the packaging arms, oriented "
+        "so higher is always better, then weighted. Controls are shown but never "
+        "scored — <code>Z0</code> has no tools and <code>Z1</code> is handed the "
+        "answers, so neither is something you could ship.</p>"
+    )
+
+    head = ("<tr>" + _th("arm")
+            + "".join(_th(label, RANK_KEYS[key][2]) for key, label in COLUMNS)
+            + _th("SCORE", RANK_KEYS["score"][2]) + "</tr>")
+    rows = []
+    for a in order:
+        score = verdict.scores.get(a.arm)
+        cells = "".join(f"<td>{_e(_cell(report, a.arm, key))}</td>"
+                        for key, _ in COLUMNS)
+        is_winner = a.arm == verdict.winner  # never highlights a tied field
+        score_cell = ("<td>—</td>" if score is None
+                      else f"<td><b>{score:.2f}</b></td>")
+        rows.append(f'<tr class="{"win" if is_winner else ""}">'
+                    f"{_arm_cell(a)}{cells}{score_cell}</tr>")
+    out.append(f'<div class="scroll"><table>{head}{"".join(rows)}</table></div>')
+
+    weights = " · ".join(f"{k} {v:.2f}" for k, v in verdict.weights.items())
+    out.append(f'<p class="note">Weights: {_e(weights)}. Change them with '
+               f"<code>--weights harm=1</code> to see, say, the safety ranking "
+               f"alone. † marks a control, excluded from scoring.</p>")
+
+    for caveat in verdict.caveats:
+        out.append(f'<div class="banner">{_e(caveat)}</div>')
+    return "\n".join(out)
+
+
+def _behaviour_section(report: Report, order, charts: dict[str, str]) -> str:
+    """Why the success rates came out the way they did.
+
+    Ordered by how much each metric separated the arms, so the section adapts to
+    what the run found rather than walking a fixed list. Restricted to mechanism
+    metrics: turns, tokens and seconds are cost, they have their own tables, and
+    unfiltered they crowd out the numbers that actually explain the result.
+    """
+    from .metrics import Bucket, get
+
+    ranked = report.metrics_by_spread(str(Bucket.MECHANISM))
+    if not ranked:
+        return ""
+
+    out = ["<h2>How each arm behaved</h2>",
+           "<p>These explain <i>why</i> the success rates came out the way they "
+           "did. Ranked by how much each one separated the arms — a metric that "
+           "came out the same everywhere explains nothing about why one "
+           "packaging beat another.</p>"]
+
+    for name in ranked[:PROMOTED]:
+        try:
+            metric = get(name)
+        except KeyError:
+            continue
+        arrow = {"higher": "↑ ", "lower": "↓ "}.get(metric.better or "", "")
+        out.append('<div class="metric">')
+        out.append(f"<h3>{_e(name.replace('_', ' '))}"
+                   f'<span class="dir">{arrow}{_e(metric.direction_note)}</span></h3>')
+        out.append(f"<p>{_e(metric.description)}</p>")
+        out.append(charts.get(f"metric-{name}", ""))
+        out.append("</div>")
+
+    rest = ranked[PROMOTED:]
+    if rest:
+        head = ("<tr><th>metric</th><th>better</th>"
+                + "".join(f"<th>{_e(a.arm)}</th>" for a in order) + "</tr>")
+        rows = []
+        for name in rest:
+            try:
+                metric = get(name)
+            except KeyError:
+                continue
+            cells = "".join(
+                f"<td>{'n/a' if (v := a.metric_mean(name)) is None else f'{v:,.2f}'}</td>"
+                for a in order)
+            rows.append(
+                f"<tr><td><b>{_e(name.replace('_', ' '))}</b><br>"
+                f'<span class="why">{_e(metric.description)}</span></td>'
+                f'<td class="prose">{_e(metric.direction_note)}</td>{cells}</tr>')
+        out.append(
+            f"<details><summary>{len(rows)} more behavioural metrics — these "
+            f"separated the arms less</summary>"
+            f'<div class="scroll"><table>{head}{"".join(rows)}</table></div>'
+            f"</details>")
+
+    constant = report.constant_metrics()
+    if constant:
+        names = ", ".join(f"{k} = {v:g}" for k, v in constant.items())
+        out.append(f'<p class="note">No variation across any run on: '
+                   f"{_e(names)}. Charting these would imply a difference that "
+                   f"is not there.</p>")
+    out.append('<p class="note">Every metric above is <b>unvalidated</b>: its '
+               "relationship to ground truth has not been established on the "
+               "controlled rig.</p>")
+    return "\n".join(out)
 
 
 def _banners(report: Report) -> str:
@@ -504,20 +731,32 @@ def _banners(report: Report) -> str:
     return "\n".join(parts)
 
 
-def _arm_table(report: Report) -> str:
+def _arm_cell(a) -> str:
+    """The arm's code and its plain-language name, in one cell.
+
+    The code alone is unreadable to anyone who has not memorised the design, and
+    a table of codes is the fastest way to make a reader scroll back to the
+    legend on every row.
+    """
+    control = ' <span class="ctl" title="control — not a shippable packaging">†</span>' if a.is_control else ""
+    name = f'<span class="armname">{_e(a.name)}</span>' if a.name else ""
+    return f"<td><b>{_e(a.arm)}</b>{control}<br>{name}</td>"
+
+
+def _arm_table(report: Report, order) -> str:
     pricing = report.pricing
     head = ("<tr>" + _th("arm") + "<th>n</th>" + _th("success", "success rate")
             + _th("95% CI") + _th("lift") + _th("turns") + _th("calls")
             + _th("static", "static tokens") + _th("trunc", "truncated")
             + _th("harm") + _th("$/success") + _th("cached") + "</tr>")
     rows = []
-    for name in sorted(report.arms):
-        a = report.arms[name]
+    for a in order:
+        name = a.arm
         ci = a.success_ci
         lift = report.lift(name)
         cps = a.cost_per_success(pricing)
         rows.append(
-            f"<tr><td>{_e(name)}</td><td>{a.n}</td>"
+            f"<tr>{_arm_cell(a)}<td>{a.n}</td>"
             f"<td>{_pct(a.success_rate)}</td>"
             f"<td>{'n/a' if ci is None else f'{ci[0]:.0%}–{ci[1]:.0%}'}</td>"
             f"<td>{'n/a' if lift is None else f'{lift:+.0%}'}"
@@ -534,7 +773,7 @@ def _arm_table(report: Report) -> str:
             + star)
 
 
-def _confusion_table(report: Report) -> str:
+def _confusion_table(report: Report, order) -> str:
     head = ("<tr>" + _th("arm") + _th("precision") + _th("recall") + _th("F1")
             + _th("accuracy") + _th("balanced", "balanced accuracy")
             + _th("specificity") + _th("MCC")
@@ -542,12 +781,12 @@ def _confusion_table(report: Report) -> str:
             + _th("TN", "TN / true negative") + _th("FN", "FN / false negative")
             + "</tr>")
     rows = []
-    for name in sorted(report.arms):
-        c = report.arms[name].confusion
+    for a in order:
+        c = a.confusion
         if not c.total:
             continue
         rows.append(
-            f"<tr><td>{_e(name)}</td><td>{_pct(c.precision)}</td>"
+            f"<tr>{_arm_cell(a)}<td>{_pct(c.precision)}</td>"
             f"<td>{_pct(c.recall)}</td><td>{_pct(c.f1)}</td>"
             f"<td>{_pct(c.accuracy)}</td><td>{_pct(c.balanced_accuracy)}</td>"
             f"<td>{_pct(c.specificity)}</td>"
@@ -561,17 +800,16 @@ def _confusion_table(report: Report) -> str:
             "sits beside it.</p>")
 
 
-def _effort_table(report: Report) -> str:
+def _effort_table(report: Report, order) -> str:
     head = ("<tr>" + _th("arm") + "<th>total tokens</th><th>input</th>"
             + _th("cached") + "<th>output</th><th>reasoning</th>"
             + "<th>seconds</th>" + _th("turns") + _th("calls") + "</tr>")
     rows = []
-    for name in sorted(report.arms):
-        a = report.arms[name]
+    for a in order:
         total_in = a.mean("input_tokens") or 0.0
         out = a.mean("output_tokens") or 0.0
         rows.append(
-            f"<tr><td>{_e(name)}</td><td>{total_in + out:,.0f}</td>"
+            f"<tr>{_arm_cell(a)}<td>{total_in + out:,.0f}</td>"
             f"<td>{total_in:,.0f}</td>"
             f"<td>{a.mean('cached_input_tokens') or 0:,.0f}</td>"
             f"<td>{out:,.0f}</td>"
@@ -587,14 +825,14 @@ def _effort_table(report: Report) -> str:
             "per success, not tokens.</p>")
 
 
-def _class_table(report: Report) -> str:
+def _class_table(report: Report, order) -> str:
     classes = report.task_classes
     head = "<tr><th>arm</th>" + "".join(f"<th>{_e(c)}</th>" for c in classes) + "</tr>"
     rows = []
-    for name in sorted(report.arms):
-        per = report.arms[name].by_class()
+    for a in order:
+        per = a.by_class()
         cells = "".join(f"<td>{_pct(per.get(c))}</td>" for c in classes)
-        rows.append(f"<tr><td>{_e(name)}</td>{cells}</tr>")
+        rows.append(f"<tr>{_arm_cell(a)}{cells}</tr>")
     return f'<div class="scroll"><table>{head}{"".join(rows)}</table></div>'
 
 

@@ -24,7 +24,8 @@ def _num(v: float | None, width: int = 6) -> str:
 
 
 def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
-           report: Report | None = None, glossary: bool = False) -> str:
+           report: Report | None = None, glossary: bool = False,
+           sort: str = "score") -> str:
     """The whole report, as text.
 
     Accepts a prebuilt `Report` so the text and HTML renderers cannot drift:
@@ -39,6 +40,9 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
         return "No results. Run `harness run` first."
     manifest = report.manifest
     arms = report.arms
+    # Every table below walks this one order, so "who won" reads the same way
+    # down the whole page instead of resetting to alphabetical each section.
+    order = report.ranked(sort)
 
     lines: list[str] = []
     model = manifest.get("model") or rows[0].get("model", "?")
@@ -52,11 +56,12 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
     # Printed before the numbers: a table of arm codes means nothing to a reader
     # who does not already know the design, and the codes are the least
     # informative thing on the page.
-    described = [(n, a.description) for n, a in sorted(arms.items()) if a.description]
+    described = [(a.arm, a.name, a.description) for a in order if a.description]
     if described:
         lines += ["  the arms — what was actually compared:"]
-        for name, text in described:
-            lines.append(f"    {name:<9} {text}")
+        for code, name, text in described:
+            lines.append(f"    {code:<9} {name}")
+            lines.append(f"    {'':<9} {text}")
         lines.append("")
 
     # --- refuse to pool ---------------------------------------------------
@@ -94,14 +99,22 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
         lines.append(f"Parametric baseline (Z0): {baseline:.0%}")
     lines.append("")
 
+    # --- the verdict ------------------------------------------------------
+    # First, because it is the question everyone opens the report to answer.
+    # It carries its own caveats: a composite always produces a ranking, and
+    # saying which parts of it are real is the whole job.
+    from .winner import render_text as render_verdict
+    lines += [render_verdict(report, report.verdict()), ""]
+
     # --- main table -------------------------------------------------------
-    header = (f"  {'arm':<8} {'success':>7} {'lift':>6} {'turns':>6} {'calls':>6} "
+    lines.append(f"  ranked by {sort}:")
+    header = (f"  {'arm':<30} {'success':>7} {'lift':>6} {'turns':>6} {'calls':>6} "
               f"{'static':>8} {'trunc':>6} {'harm':>5}")
     lines += [header, "  " + "-" * (len(header) - 2)]
-    for name, arm in sorted(arms.items()):
-        lift = report.lift(name)
+    for arm in order:
+        lift = report.lift(arm.arm)
         lines.append(
-            f"  {name:<8} {_pct(arm.success_rate)} "
+            f"  {arm.label[:30]:<30} {_pct(arm.success_rate)} "
             f"{('  n/a' if lift is None else f'{lift:+5.0%}')} "
             f"{_num(arm.mean('turns'))} {_num(arm.mean('calls'))} "
             f"{_num(arm.mean('static_tokens'), 8)} "
@@ -112,22 +125,23 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
     classes = report.task_classes
     if len(classes) > 1:
         lines += ["", "  success by task class (RQ4 — does the ranking reverse?):"]
-        lines.append("    " + "arm".ljust(8) + "".join(c.rjust(9) for c in classes))
-        for name, arm in sorted(arms.items()):
+        lines.append("    " + "arm".ljust(30) + "".join(c.rjust(9) for c in classes))
+        for arm in order:
             per = arm.by_class()
-            lines.append("    " + name.ljust(8)
+            lines.append("    " + arm.label[:30].ljust(30)
                          + "".join(_pct(per.get(c)).rjust(9) for c in classes))
 
     # --- cost -------------------------------------------------------------
     pricing = report.pricing
     if pricing:
         lines += ["", "  cost (actual usage):"]
-        lines.append(f"    {'arm':<8} {'total':>10} {'per success':>12} {'cached':>8}")
-        for name, arm in sorted(arms.items()):
+        lines.append(f"    {'arm':<30} {'total':>10} {'per success':>12} {'cached':>8}")
+        for arm in order:
             per = arm.cost_per_success(pricing)
             hit = arm.cache_hit_rate() or 0.0
             lines.append(
-                f"    {name:<8} {'$' + format(arm.cost(pricing).total_usd, '.4f'):>10} "
+                f"    {arm.label[:30]:<30} "
+                f"{'$' + format(arm.cost(pricing).total_usd, '.4f'):>10} "
                 f"{('$' + format(per, '.4f')) if per else 'n/a':>12} {hit:>7.0%}"
             )
 
@@ -137,28 +151,32 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
     # recall falls when it declines what it should answer.
     if any(a.confusion.total for a in arms.values()):
         lines += ["", "  answer-or-abstain (higher is better, except FP):"]
-        lines.append(f"    {'arm':<8} {'prec':>6} {'recall':>7} {'F1':>6} "
-                     f"{'acc':>6} {'bal-acc':>8} {'MCC':>7} {'TP/FP/TN/FN':>14}")
-        for name, arm in sorted(arms.items()):
+        lines.append(f"    {'arm':<30} {'prec':>6} {'recall':>7} {'abstain':>8} "
+                     f"{'F1':>6} {'acc':>6} {'bal-acc':>8} {'MCC':>7} "
+                     f"{'TP/FP/TN/FN':>14}")
+        for arm in order:
             c = arm.confusion
             if not c.total:
                 continue
             lines.append(
-                f"    {name:<8} {_pct(c.precision)} {_pct(c.recall):>7} "
+                f"    {arm.label[:30]:<30} {_pct(c.precision)} {_pct(c.recall):>7} "
+                f"{_pct(c.specificity):>8} "
                 f"{_pct(c.f1)} {_pct(c.accuracy)} {_pct(c.balanced_accuracy):>8} "
                 f"{('n/a' if c.mcc is None else f'{c.mcc:+.2f}'):>7} "
                 f"{f'{c.tp}/{c.fp}/{c.tn}/{c.fn}':>14}"
             )
+        lines.append("    abstain = of the tasks with NO valid answer, the share "
+                     "correctly declined.")
 
     # --- effort -----------------------------------------------------------
     lines += ["", "  effort per run (mean):"]
-    lines.append(f"    {'arm':<8} {'tokens':>9} {'in':>8} {'cached':>8} {'out':>7} "
+    lines.append(f"    {'arm':<30} {'tokens':>9} {'in':>8} {'cached':>8} {'out':>7} "
                  f"{'reason':>7} {'secs':>6} {'turns':>6} {'calls':>6}")
-    for name, arm in sorted(arms.items()):
+    for arm in order:
         total_in = arm.mean("input_tokens") or 0.0
         out = arm.mean("output_tokens") or 0.0
         lines.append(
-            f"    {name:<8} {total_in + out:>9,.0f} {total_in:>8,.0f} "
+            f"    {arm.label[:30]:<30} {total_in + out:>9,.0f} {total_in:>8,.0f} "
             f"{arm.mean('cached_input_tokens') or 0:>8,.0f} {out:>7,.0f} "
             f"{arm.mean('reasoning_tokens') or 0:>7,.0f} "
             f"{arm.mean('wall_clock_seconds') or 0:>6.1f} "
@@ -166,7 +184,10 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
         )
 
     grand = sum((r["input_tokens"] + r["output_tokens"]) for r in rows)
-    lines.append(f"    {'ALL':<8} {grand:>9,} tokens across {len(rows)} runs")
+    lines.append(f"    {'ALL':<30} {grand:>9,} tokens across {len(rows)} runs")
+
+    # --- how each arm behaved ---------------------------------------------
+    lines += _behaviour_section(report, order)
 
     # --- safety -----------------------------------------------------------
     silent = {n: a.silent_failure_rate for n, a in arms.items()
@@ -195,6 +216,75 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
     else:
         lines.append("  every term is explained by: harness report <dir> --glossary")
     return "\n".join(lines)
+
+
+#: How many behavioural metrics get the full treatment. The rest are still
+#: printed, just without the paragraph — a page of equally-weighted charts is
+#: how a reader ends up ignoring all of them.
+PROMOTED = 3
+
+
+def _behaviour_section(report: Report, order: list[ArmSummary]) -> list[str]:
+    """Why the success rates came out the way they did.
+
+    Ordered by how much each metric actually separated the arms, so the section
+    adapts to what the run found instead of walking a fixed list. A metric that
+    came out identical everywhere explains nothing about why one packaging beat
+    another, however interesting it is in the abstract.
+    """
+    from .metrics import Bucket, get
+
+    ranked = report.metrics_by_spread(str(Bucket.MECHANISM))
+    if not ranked:
+        return []
+
+    lines = ["", "  how each arm behaved — why the success rates came out this way:"]
+    for name in ranked[:PROMOTED]:
+        try:
+            metric = get(name)
+        except KeyError:
+            continue
+        lines.append("")
+        lines.append(f"    {name.replace('_', ' ')}  ({metric.direction_note})")
+        lines.append("    " + _wrap(metric.description, 72, "    "))
+        for arm in order:
+            value = arm.metric_mean(name)
+            if value is not None:
+                lines.append(f"      {arm.label[:32]:<32} {value:>10,.2f}")
+
+    rest = ranked[PROMOTED:]
+    if rest:
+        lines += ["", "    the rest (lower spread across arms — they separated "
+                  "the arms less):"]
+        width = max(len(n) for n in rest)
+        lines.append("      " + " " * width + "  "
+                     + "".join(a.arm.rjust(10) for a in order))
+        for name in rest:
+            try:
+                arrow = {"higher": "↑", "lower": "↓"}.get(get(name).better or "", " ")
+            except KeyError:
+                arrow = " "
+            cells = "".join(
+                (f"{v:,.2f}".rjust(10) if (v := arm.metric_mean(name)) is not None
+                 else "n/a".rjust(10))
+                for arm in order
+            )
+            lines.append(f"      {name:<{width}} {arrow} {cells}")
+        lines.append("      ↑ higher is better   ↓ lower is better")
+
+    constant = report.constant_metrics()
+    if constant:
+        names = ", ".join(f"{k} = {v:g}" for k, v in constant.items())
+        lines.append("")
+        lines.append("    " + _wrap(
+            f"No variation across any run on: {names}. Showing these would "
+            "imply a difference that is not there.", 72, "    "))
+    return lines
+
+
+def _wrap(text: str, width: int, indent: str) -> str:
+    import textwrap
+    return ("\n" + indent).join(textwrap.wrap(text, width))
 
 
 def _footer(report_class: str, truncated: int) -> str:

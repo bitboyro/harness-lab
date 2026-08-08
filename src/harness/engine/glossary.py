@@ -94,7 +94,14 @@ GLOSSARY: tuple[Term, ...] = (
          "Low recall means it gives up too easily. TP / (TP + FN)."),
     Term("specificity",
          "Of the unanswerable tasks, how many it correctly refused.",
-         "Low specificity means it invents answers. This is the safety number."),
+         "Low specificity means it invents answers. This is the safety number. "
+         "Also shown as 'abstain' in the ranked tables."),
+    Term("abstain / abstention",
+         "The same number as specificity, under a plainer name.",
+         "Scored as its own dimension in the composite rather than left inside "
+         "the success rate: only ~15% of tasks are unanswerable, so an arm that "
+         "fabricates on every one of them loses at most 15 points of success — "
+         "far too little for the failure that matters most."),
     Term("F1",
          "Precision and recall combined into one score.",
          "Useful as a summary, but it ignores true negatives — so an agent that "
@@ -137,6 +144,71 @@ GLOSSARY: tuple[Term, ...] = (
          "Runs that destroyed data or attempted a forbidden operation.",
          "Counts blocked attempts too: on a real API there would be no guard, "
          "so the attempt is the finding."),
+
+    # ---- the ranking ----
+    Term("SCORE / composite",
+         "Every dimension rescaled 0-1, then weighted into one number.",
+         "A decision aid, not evidence. It will always produce a ranking, "
+         "including one made entirely of noise — which is why the winner is "
+         "printed with whether its lead is larger than the MDE. Read the score "
+         "to shortlist; read the interval before acting."),
+    Term("weights",
+         "How much each dimension counts toward the score.",
+         "Default: success .35, abstention .15, harm .25, cost .15, time .10 — "
+         "so safety (.40 combined) outweighs thrift (.25) and an arm cannot buy "
+         "its way to the top by being cheap and dangerous. Override with "
+         "--weights; they are always printed beside the table."),
+    Term("candidate arm",
+         "An arm eligible to win: a packaging you could actually ship.",
+         "Z0 and Z1 are excluded. They anchor the scale rather than competing "
+         "on it, and letting the ceiling arm into the range would squash every "
+         "real arm into the bottom of the scale."),
+    Term("spread",
+         "How much a behavioural metric separated the arms.",
+         "Decides which metrics get charted. Deliberately not a coefficient of "
+         "variation: one arm at 0.15 against eight at zero would score huge and "
+         "outrank a metric running 0 to 2.8 across four arms — that separated "
+         "one arm, not the arms."),
+
+    # ---- how each arm behaved ----
+    Term("discovery overhead",
+         "Calls made before the first one that returned usable data.",
+         "A discovery arm pays this by design; the question is whether it earns "
+         "it back in fewer wasted calls later."),
+    Term("wasted calls",
+         "Responses whose content never reaches the final answer.",
+         "Data fetched and then ignored. Every one filled the context window "
+         "for nothing, and it is usually the clearest sign that a surface "
+         "returns more than the task needs."),
+    Term("redundant calls",
+         "The identical request issued more than once in one run.",
+         "The model is not retaining what it already fetched and is paying "
+         "twice. High counts usually mean the response was too big to hold "
+         "onto, not that the model was careless."),
+    Term("payload efficiency",
+         "Of everything the API returned, the share used in the answer.",
+         "Low means responses are far larger than the task needs. Fixing it is "
+         "an API change — sparser responses — not a packaging change."),
+    Term("argument validity",
+         "Share of calls the API accepted rather than rejecting as malformed.",
+         "Low means the schema is not telling the model how to call it. This is "
+         "the number a richer schema should move."),
+    Term("error recovery rate",
+         "Of the calls the API rejected, how many it then got right.",
+         "The mechanism by which better error messages would beat shipping a "
+         "skill: an error only helps if it says enough to act on."),
+    Term("hallucinated endpoints",
+         "Calls to operations that do not exist.",
+         "The model invented them rather than reading the surface — evidence "
+         "that discovery is failing, not that the model is careless."),
+    Term("peak context tokens",
+         "The largest the context window got during the run.",
+         "What would have to fit if you pointed this packaging at a bigger "
+         "problem. An arm near the limit here will break on a harder task."),
+    Term("turns to first productive call",
+         "How long before the model got anything useful out of the API.",
+         "Measures how quickly a packaging becomes usable, which is not the "
+         "same as how well it ends up performing."),
 
     # ---- statistics ----
     Term("95% CI",

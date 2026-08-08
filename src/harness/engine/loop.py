@@ -19,6 +19,7 @@ from typing import Any
 from .axes import Invocation, Variant
 from .executors import GuardedExecutor
 from .generate import ApiSpec
+from .infra import classify
 from .packaging import Call, Materials, PackagingMethod
 from .provider import Provider, ProviderConfig
 from .trace import CallRecord, Trace, Turn
@@ -69,6 +70,11 @@ class AgentRunner:
             self._loop(trace, materials, executor, prompt)
         except Exception as e:  # noqa: BLE001 — a failed run is a data point
             trace.error = f"{type(e).__name__}: {e}"
+            # ...but only if it is a data point about the *arm*. A run killed by
+            # a full disk or a dead API key measured nothing, and must not be
+            # graded as though the packaging failed. Classified from the live
+            # exception, never from its string.
+            trace.error_kind = classify(e)
             trace.finish(None)
         finally:
             executor.teardown()

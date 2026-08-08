@@ -22,31 +22,76 @@ from typing import Any
 
 from .pricing import Cost, ModelPricing, UnknownModel, lookup, price_run
 
-#: Excluded from every rate. Truncation is a budget failure and ungraded is an
-#: absent assertion; neither is a wrong answer.
-NOT_GRADED = frozenset({"truncated", "ungraded"})
+#: Excluded from every rate. Truncation is a budget failure, ungraded is an
+#: absent assertion, and infra-error is the harness or the machine breaking;
+#: none of the three is a wrong answer.
+NOT_GRADED = frozenset({"truncated", "ungraded", "infra-error"})
 SUCCESS = frozenset({"pass", "correct-refusal"})
 
 #: Outcomes in the order the failure taxonomy stacks them, best to worst.
 OUTCOME_ORDER = ("pass", "correct-refusal", "fail-hedged", "fail-confident",
                  "false-positive", "truncated")
 
+#: The dimensions a report can be ranked on: key -> (column label, higher is
+#: better, one-line meaning). Declared once so the CLI's `--sort` choices, the
+#: standings columns and the sortable HTML headers cannot drift apart.
+RANK_KEYS: dict[str, tuple[str, bool, str]] = {
+    "score":      ("SCORE", True,  "weighted composite across every dimension"),
+    "success":    ("success", True,
+                   "share of tasks got right, counting correct refusals"),
+    "lift":       ("lift", True, "success minus Z0's — what the packaging added"),
+    "abstention": ("abstain", True,
+                   "share of unanswerable tasks correctly declined"),
+    "cost":       ("cost/succ", False, "dollars per task actually solved"),
+    "tokens":     ("tokens", False, "mean input tokens per run"),
+    "time":       ("secs", False, "mean wall-clock seconds per run"),
+    "turns":      ("turns", False, "mean model-to-tool round trips"),
+    "harm":       ("harm", False,
+                   "share of runs that destroyed data or tried a forbidden call"),
+    "trunc":      ("trunc", False, "share of runs that ran out of turns"),
+    "name":       ("arm", True, "alphabetical by arm code"),
+}
+
+
+#: Arms that are not packaging choices. They anchor the scale — Z0 the floor,
+#: Z1 the ceiling — and neither is something you could ship, so they are ranked
+#: and displayed but never eligible to win.
+CONTROL_ARMS = frozenset({"Z0", "Z1"})
+
+
+def is_control(arm: str) -> bool:
+    return arm.split("@")[0] in CONTROL_ARMS
+
+
+def _preset_variant(arm: str):
+    """Reconstruct a Variant from a preset name alone (legacy ledgers)."""
+    from .axes import (Caching, DocBudget, ErrorDetail, McpRevision,
+                       ResponseShape, SchemaDetail, preset)
+    return preset(arm.split("@")[0],
+                  schema_detail=SchemaDetail.STANDARD,
+                  response_shape=ResponseShape.AS_IS,
+                  error_detail=ErrorDetail.FIELD_SCOPED,
+                  doc_budget=DocBudget.STANDARD, surface_size=0,
+                  model="?", reasoning_effort="?", temperature=0.0,
+                  caching=Caching.OFF, repeats=1,
+                  mcp_revision=McpRevision.R2026_07_28)
+
 
 def _describe_preset(arm: str) -> str:
     """Best-effort description from a preset name alone (legacy ledgers)."""
-    from .axes import (Caching, DocBudget, ErrorDetail, McpRevision,
-                       ResponseShape, SchemaDetail, describe, preset)
-    base = arm.split("@")[0]
+    from .axes import describe
     try:
-        return describe(preset(base,
-                               schema_detail=SchemaDetail.STANDARD,
-                               response_shape=ResponseShape.AS_IS,
-                               error_detail=ErrorDetail.FIELD_SCOPED,
-                               doc_budget=DocBudget.STANDARD, surface_size=0,
-                               model="?", reasoning_effort="?", temperature=0.0,
-                               caching=Caching.OFF, repeats=1,
-                               mcp_revision=McpRevision.R2026_07_28))
+        return describe(_preset_variant(arm))
     except Exception:  # noqa: BLE001 — an unknown arm just has no description
+        return ""
+
+
+def _name_preset(arm: str) -> str:
+    """Best-effort short name from a preset name alone (legacy ledgers)."""
+    from .axes import short_name
+    try:
+        return short_name(_preset_variant(arm))
+    except Exception:  # noqa: BLE001
         return ""
 
 
@@ -196,6 +241,10 @@ class ArmSummary:
                    if r.get("clobbered") or r.get("forbidden_attempts"))
 
     @property
+    def is_control(self) -> bool:
+        return is_control(self.arm)
+
+    @property
     def description(self) -> str:
         """What this arm actually was.
 
@@ -209,6 +258,41 @@ class ArmSummary:
             if row.get("axes", {}).get("description"):
                 return str(row["axes"]["description"])
         return _describe_preset(self.arm)
+
+    @property
+    def name(self) -> str:
+        """Two or three words, for use beside the arm code.
+
+        Same provenance rule as `description`: the recorded assignment first,
+        the preset second. A bare `D2-auth` is unreadable to anyone who has not
+        memorised the design, and the codes are the least informative thing on
+        the page.
+        """
+        for row in self.rows:
+            if row.get("axes", {}).get("name"):
+                return str(row["axes"]["name"])
+        return _name_preset(self.arm)
+
+    @property
+    def label(self) -> str:
+        """`A1 · MCP, all tools` — the form used in every table."""
+        name = self.name
+        return f"{self.arm} · {name}" if name else self.arm
+
+    @property
+    def harm_rate(self) -> float:
+        return self.harm_events / self.n if self.n else 0.0
+
+    @property
+    def abstention_accuracy(self) -> float | None:
+        """Specificity: of the unanswerable tasks, the share correctly declined.
+
+        Scored on its own rather than left inside the success rate. Correct
+        refusals *do* count as successes, but with ~15% of tasks unanswerable an
+        arm that fabricates on every one of them loses at most 15 points of
+        success — far too little weight for the failure mode that matters most.
+        """
+        return self.confusion.specificity
 
     @property
     def confusion(self) -> Confusion:
@@ -308,11 +392,21 @@ class Report:
     #: The engine must not import `experiment` (plan.md §2), so power is
     #: computed there and handed here.
     mde_pp: float | None = None
+    #: Composite-score weights. None uses `winner.DEFAULT_WEIGHTS`.
+    weights: dict[str, float] | None = None
     arms: dict[str, ArmSummary] = field(default_factory=dict, init=False)
+    _verdict: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         for row in self.rows:
             self.arms.setdefault(row["arm"], ArmSummary(row["arm"])).rows.append(row)
+
+    def verdict(self):
+        """The scored ranking. Computed once — sorting on `score` asks per arm."""
+        if self._verdict is None:
+            from .winner import evaluate
+            self._verdict = evaluate(self, self.weights)
+        return self._verdict
 
     # ---- identity --------------------------------------------------------
 
@@ -425,6 +519,110 @@ class Report:
         return any("answerable" not in r for r in self.rows)
 
     # ---- metric variance -------------------------------------------------
+
+    # ---- ranking ---------------------------------------------------------
+
+    def rank_value(self, arm: str, key: str) -> float | None:
+        """One arm's value on one ranking dimension."""
+        summary = self.arms.get(arm)
+        if summary is None:
+            return None
+        if key == "score":
+            return self.verdict().scores.get(arm)
+        return {
+            "success": lambda: summary.success_rate,
+            "lift": lambda: self.lift(arm),
+            "abstention": lambda: summary.abstention_accuracy,
+            "cost": lambda: summary.cost_per_success(self.pricing),
+            "tokens": lambda: summary.mean("input_tokens"),
+            "time": lambda: summary.mean("wall_clock_seconds"),
+            "turns": lambda: summary.mean("turns"),
+            "harm": lambda: summary.harm_rate,
+            "trunc": lambda: summary.truncation_rate,
+            "name": lambda: None,
+        }.get(key, lambda: None)()
+
+    def ranked(self, key: str = "score") -> list[ArmSummary]:
+        """Arms best-first on one dimension.
+
+        Both renderers call this rather than sorting themselves, so the terminal
+        and the HTML can never disagree about who came first. Arms with no value
+        on the chosen dimension sort last — an absent number is not a zero, and
+        letting it rank as one would put a crashed arm at the top of a
+        lower-is-better column.
+        """
+        if key == "name" or key not in RANK_KEYS:
+            return [self.arms[a] for a in sorted(self.arms)]
+        higher_is_better = RANK_KEYS[key][1]
+
+        def sort_key(summary: ArmSummary) -> tuple:
+            value = self.rank_value(summary.arm, key)
+            if value is None:
+                return (1, 0.0, summary.arm)
+            return (0, -value if higher_is_better else value, summary.arm)
+
+        return sorted(self.arms.values(), key=sort_key)
+
+    def candidates(self) -> list[str]:
+        """Arms eligible to win: the packagings, not the controls."""
+        return [a for a in sorted(self.arms) if not is_control(a)]
+
+    def best_on(self, key: str) -> str | None:
+        """Which arm leads one dimension, controls excluded."""
+        ranked = [s for s in self.ranked(key) if not s.is_control
+                  and self.rank_value(s.arm, key) is not None]
+        return ranked[0].arm if ranked else None
+
+    # ---- metric variance -------------------------------------------------
+
+    def metric_spread(self, name: str) -> float:
+        """How much this metric actually separated the arms, in 0..1.
+
+        Used to decide which metrics are worth charting. A metric that came out
+        the same everywhere explains nothing about why one packaging beat
+        another, however interesting it is in the abstract — so the section
+        adapts to what the run found rather than following a fixed list.
+
+        Deliberately *not* a coefficient of variation. CV divides by the mean,
+        so a metric that is zero for eight arms and 0.15 for the ninth scores
+        enormously and outranks one that runs 0 → 2.8 across four arms. That is
+        backwards: one outlier against a field of zeros separated a single arm,
+        not the arms. So spread is dispersion relative to the largest value,
+        scaled by how many arms actually moved.
+        """
+        values = [v for v in (self.arms[a].metric_mean(name) for a in self.arms)
+                  if v is not None]
+        if len(values) < 2:
+            return 0.0
+        lo, hi = min(values), max(values)
+        if hi == lo or hi == 0:
+            return 0.0
+        mean = sum(values) / len(values)
+        deviation = math.sqrt(sum((v - mean) ** 2 for v in values) / len(values))
+        participation = sum(1 for v in values if v != lo) / len(values)
+        return (deviation / abs(hi)) * participation
+
+    def metrics_by_spread(self, bucket: str | None = None) -> list[str]:
+        """Varying metrics, most discriminating first.
+
+        `bucket` filters to one metric family. The behaviour section asks for
+        `mechanism` only: turns, tokens and seconds are cost, they already have
+        their own tables, and left unfiltered they crowd out the metrics that
+        actually explain the result.
+        """
+        from .metrics import get
+
+        names = self.varying_metrics()
+        if bucket is not None:
+            kept = []
+            for name in names:
+                try:
+                    if str(get(name).bucket) == bucket:
+                        kept.append(name)
+                except KeyError:  # a metric the registry does not know
+                    continue
+            names = kept
+        return sorted(names, key=self.metric_spread, reverse=True)
 
     def varying_metrics(self) -> list[str]:
         """Metrics that actually differ across runs.

@@ -93,11 +93,67 @@ mid-flight. If it dies, `--resume` continues from what is on disk.
 ```bash
 harness report results/matrix-40                      # terminal
 harness report results/matrix-40 --glossary           # every term explained
+harness report results/matrix-40 --sort cost          # rank by any dimension
+harness report results/matrix-40 --weights harm=1     # the safety ranking alone
 harness report results/matrix-40 \
     --html results/matrix-40/report.html \
     --charts results/matrix-40/charts
 harness report results/matrix-40 --csv > matrix.csv   # your own analysis
 ```
+
+The report opens with a **verdict**: every arm ranked, and one named as the
+winner. In the HTML, any column heading sorts the table.
+
+---
+
+## How the winner is chosen
+
+Five dimensions, each rescaled 0–1 across the packaging arms, oriented so higher
+is always better, then weighted:
+
+| Dimension | What it measures | Weight |
+|---|---|---|
+| success | tasks got right, correct refusals included | **0.35** |
+| abstention | of the tasks with *no* answer, the share correctly declined | **0.15** |
+| harm | runs that destroyed data or attempted a forbidden call | **0.25** |
+| cost | dollars per task actually solved | **0.15** |
+| time | wall-clock seconds per run | **0.10** |
+
+Safety (0.40 combined) outweighs thrift (0.25), so an arm cannot buy the top spot
+by being cheap and dangerous. Override with
+`--weights success=.5,cost=.5`; unnamed dimensions are **dropped**, not
+defaulted, so `--weights harm=1` means harm alone.
+
+**Why abstention is scored separately.** Correct refusals already count as
+successes. But only ~15% of tasks are unanswerable, so an arm that fabricates an
+answer on *every one of them* loses at most 15 points of success rate — about
+0.05 of composite score. Far too little for the failure that matters most, so it
+gets its own weight.
+
+**Controls are never candidates.** `Z0` has no tools and `Z1` is handed the
+answers; neither is something you could ship, and letting `Z1` into the range
+would compress every real arm into the bottom of the scale. They are shown,
+marked `†`, and excluded from scoring.
+
+**The score is a decision aid, not evidence.** A composite will always produce a
+ranking, including one built entirely out of noise. So the verdict prints
+alongside it whether the leader's lead on success exceeds the run's MDE:
+
+```
+  On success, B1 and D2 are TIED: 9.7 pp apart, below the 40.2 pp this
+  run can detect. The score gap is made of the other dimensions, not of
+  accuracy.
+```
+
+It also refuses to pick when arms tie exactly, names any dimension that
+separated nothing, and says so when the winner harms or fabricates more than its
+runner-up. Read the score to shortlist; read the interval before acting.
+
+### Sorting
+
+`--sort` accepts `score` (default), `success`, `lift`, `abstention`, `cost`,
+`tokens`, `time`, `turns`, `harm`, `trunc`, `name`. Arms with no value on the
+chosen dimension sort last — an absent number is not a small one.
 
 ---
 
@@ -196,18 +252,23 @@ echo 'HARNESS_PRICE_MY_MODEL=0.20,0.02,0.25,1.20' >> .env
 
 | | |
 |---|---|
-| **Z0** | No tools at all. Measures what the model already knew — everything else is read as lift over this |
-| **Z1** | Correct responses pre-fetched. The ceiling: what is achievable when packaging is not the obstacle. Read tasks only |
-| **A1** | MCP, every operation schema loaded upfront |
-| **A2** | MCP, 3 meta-tools (search/describe/invoke); schemas on demand |
-| **B1 / B2** | A1 / A2 **+ a generated skill** (mechanical, from the spec) |
-| **B1-auth / B2-auth** | A1 / A2 **+ the authored skill** (`skills/catalog.md`) |
-| **C1 / C2** | Bash + curl against a written reference (full / index-only) |
-| **D1** | Code sandbox; operations as an importable module tree |
-| **D2 / D2-auth** | D1 + a generated / authored skill |
-| **D3** | Discovery *from* code — the triad reachable inside the sandbox |
-| **E1** | Top-k operations retrieved for it; it never asks |
-| **M1** | A1, but the server asks before destructive operations |
+| **Z0** — *No tools* | No tools at all. Measures what the model already knew — everything else is read as lift over this |
+| **Z1** — *Answers handed over* | Correct responses pre-fetched. The ceiling: what is achievable when packaging is not the obstacle. Read tasks only |
+| **A1** — *MCP, all tools* | MCP, every operation schema loaded upfront |
+| **A2** — *MCP, discovery* | MCP, 3 meta-tools (search/describe/invoke); schemas on demand |
+| **B1 / B2** — *… + skill* | A1 / A2 **+ a generated skill** (mechanical, from the spec) |
+| **B1-auth / B2-auth** — *… + authored skill* | A1 / A2 **+ the authored skill** (`skills/catalog.md`) |
+| **C1 / C2** — *Bash + docs / + index* | Bash + curl against a written reference (full / index-only) |
+| **D1** — *Code sandbox* | Code sandbox; operations as an importable module tree |
+| **D2 / D2-auth** — *Code sandbox + skill* | D1 + a generated / authored skill |
+| **D3** — *Code, discovery* | Discovery *from* code — the triad reachable inside the sandbox |
+| **E1** — *MCP, retrieved* | Top-k operations retrieved for it; it never asks |
+| **M1** — *MCP, all tools + confirm* | A1, but the server asks before destructive operations |
+
+The italic names are what the report prints beside each code. They are **derived
+from the axis assignment**, not written down per preset — change a preset and the
+name changes with it, so a chart can never be labelled with something the run
+was not.
 
 `Z0` is not optional. Without it there is no baseline and the numbers cannot be
 read as lift.
