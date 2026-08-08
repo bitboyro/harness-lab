@@ -119,11 +119,22 @@ class Executor(Protocol):
     def teardown(self) -> None: ...
 
 
+#: Capabilities a method may require of its target before it can run.
+#: Declared by the method; negotiated by the binder — never a list of classes
+#: the caller remembers. `prefetch` is what makes Z1 refuse itself on a target
+#: that cannot supply gold responses rather than silently scoring 0.
+METHOD_NEEDS = frozenset({"executor_factory", "sandbox_env", "prefetch"})
+
+
 @runtime_checkable
 class PackagingMethod(Protocol):
     """One way of presenting an API to an agent."""
 
     name: str
+    #: What this method needs the target to provide. Empty means nothing.
+    needs: frozenset[str]
+    #: Material slots this method accepts (skill, helpers, docs, …). Phase 2.
+    slots: frozenset[str]
 
     def supports(self, variant: Variant) -> bool:
         """Whether this method can realise the given axis assignment."""
@@ -137,6 +148,16 @@ class PackagingMethod(Protocol):
     def account(self, trace: Any) -> CostBreakdown:
         """What this method cost, decomposed."""
 
+    def bind(
+        self,
+        *,
+        make_executor: Any = None,
+        env: dict[str, str] | None = None,
+        prefetched: str | None = None,
+    ) -> PackagingMethod:
+        """Return a wired copy ready for one run. Unbound prototypes stay in
+        the registry; binding never mutates them."""
+
 
 _REGISTRY: dict[str, PackagingMethod] = {}
 
@@ -149,7 +170,12 @@ def register(method: PackagingMethod) -> PackagingMethod:
 
 
 def resolve(variant: Variant) -> PackagingMethod:
-    """Find the one registered method that can realise this variant."""
+    """Find the one registered method that can realise this variant.
+
+    Selection is by ``supports()`` — never by preset name. The name→class
+    tables that used to live in ``rig`` and ``cli`` were redundant with this
+    and drifted silently (probe dropped the skill condition on B1/B2).
+    """
     candidates = [m for m in _REGISTRY.values() if m.supports(variant)]
     if not candidates:
         raise LookupError(
@@ -167,3 +193,8 @@ def resolve(variant: Variant) -> PackagingMethod:
 
 def registered() -> tuple[str, ...]:
     return tuple(sorted(_REGISTRY))
+
+
+def clear_registry() -> None:
+    """Test helper. Production never unregisters."""
+    _REGISTRY.clear()

@@ -41,6 +41,10 @@ _CSS = """
   p  { margin: 0 0 10px; color: var(--text-secondary); }
   .sub { color: var(--text-muted); font-size: 12px; }
   .note { font-size: 12px; color: var(--text-muted); margin: 6px 0 0; }
+  pre.ops { font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+            background: var(--surface-2, var(--surface-1));
+            color: var(--text-primary); padding: 14px 16px; border-radius: 6px;
+            overflow-x: auto; white-space: pre-wrap; }
   /* Each severity gets its own tinted surface, mixed from the status colour
      into the page surface, so the tint stays legible in both themes instead of
      a fixed pastel that goes muddy in dark mode. Text stays on text tokens
@@ -462,6 +466,11 @@ def render_html(report: Report, sort: str = "score") -> str:
             )
 
     # ---- tables ----------------------------------------------------------
+    if report.op_ledger is not None and (
+            report.op_ledger.calls or report.op_ledger.excluded_arms
+    ):
+        out.append(_op_ledger_section(report.op_ledger))
+
     out.append("<h2>Details</h2>")
     out.append("<h3>Answer or abstain</h3>")
     out.append(_confusion_table(report, order))
@@ -625,6 +634,26 @@ def _verdict_section(report: Report, order) -> str:
     for caveat in verdict.caveats:
         out.append(f'<div class="banner">{_e(caveat)}</div>')
     return "\n".join(out)
+
+
+def _op_ledger_section(ledger) -> str:
+    """Customer payoff: which ops agents lean on and misuse.
+
+    Renders the same text blocks as the CLI report — one analysis object, two
+    surfaces — so HTML and text cannot disagree about rates or unavailable
+    signals.
+    """
+    body = ledger.render()
+    # Drop the leading indent the text report uses for nesting under the page.
+    lines = [ln[2:] if ln.startswith("  ") else ln for ln in body.splitlines()]
+    escaped = _e("\n".join(lines))
+    return (
+        "<h2>Operation ledger</h2>"
+        "<p>Where agents spend and stumble on the target API. Rates, not raw "
+        "counts. Discovery meta-tools are footnoted, not mixed into the "
+        "product chart.</p>"
+        f'<pre class="ops">{escaped}</pre>'
+    )
 
 
 def _behaviour_section(report: Report, order, charts: dict[str, str]) -> str:

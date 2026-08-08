@@ -96,6 +96,12 @@ harness report results/probe-1 --html report.html --charts charts/
 Then [reading-results.md](./reading-results.md), which covers what the numbers
 mean and — more usefully — which ones you are not entitled to.
 
+The report’s **operation ledger** names which endpoints agents over-touch and
+stumble on (wrong-route / call-error / forbidden), rolled up by family with
+packaging deltas. Without gold paths in the pack, excess and off-gold stay
+marked unavailable — not zero. Details and interpretation guards live in
+reading-results under “Operation ledger”.
+
 ## Safety
 
 Writes are **off** by default and should stay off until you have a staging

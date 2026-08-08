@@ -69,21 +69,34 @@ POOLING_FIELDS = ("model", "mcp_spec_revision", "skill_condition", "report_class
 
 
 def is_control(arm: str) -> bool:
-    return arm.split("@")[0] in CONTROL_ARMS
+    from .axes import split_label
+    return split_label(arm)[0] in CONTROL_ARMS
 
 
 def _preset_variant(arm: str):
     """Reconstruct a Variant from a preset name alone (legacy ledgers)."""
     from .axes import (Caching, DocBudget, ErrorDetail, McpRevision,
-                       ResponseShape, SchemaDetail, preset)
-    return preset(arm.split("@")[0],
-                  schema_detail=SchemaDetail.STANDARD,
-                  response_shape=ResponseShape.AS_IS,
-                  error_detail=ErrorDetail.FIELD_SCOPED,
-                  doc_budget=DocBudget.STANDARD, surface_size=0,
-                  model="?", reasoning_effort="?", temperature=0.0,
-                  caching=Caching.OFF, repeats=1,
-                  mcp_revision=McpRevision.R2026_07_28)
+                       ResponseShape, SchemaDetail, preset, split_label)
+    base, overrides = split_label(arm)
+    axes = dict(
+        schema_detail=SchemaDetail.STANDARD,
+        response_shape=ResponseShape.AS_IS,
+        error_detail=ErrorDetail.FIELD_SCOPED,
+        doc_budget=DocBudget.STANDARD, surface_size=0,
+        model="?", reasoning_effort="?", temperature=0.0,
+        caching=Caching.OFF, repeats=1,
+        mcp_revision=McpRevision.R2026_07_28,
+    )
+    for axis, value in overrides.items():
+        if axis == "error_detail":
+            axes["error_detail"] = ErrorDetail(value)
+        elif axis == "response_shape":
+            axes["response_shape"] = ResponseShape(value)
+        elif axis == "doc_budget":
+            axes["doc_budget"] = DocBudget(value)
+        elif axis == "schema_detail":
+            axes["schema_detail"] = SchemaDetail(value)
+    return preset(base, **axes)
 
 
 def _describe_preset(arm: str) -> str:
@@ -403,6 +416,9 @@ class Report:
     mde_pp: float | None = None
     #: Composite-score weights. None uses `winner.DEFAULT_WEIGHTS`.
     weights: dict[str, float] | None = None
+    #: Operation ledger (Phase 9). Built at report time from traces; None when
+    #: the results directory has no traces/ to join.
+    op_ledger: Any = None
     arms: dict[str, ArmSummary] = field(default_factory=dict, init=False)
     _verdict: Any = field(default=None, init=False, repr=False)
 

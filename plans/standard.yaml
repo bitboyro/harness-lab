@@ -1,0 +1,31 @@
+# The recommended ladder: twelve arms, forty cores, three repeats.
+run_plan:
+  id: standard
+  rationale: >
+    The confirmatory packaging ladder: controls, eager vs meta-tools, skill
+    conditions, docs+curl, and the code sandbox — enough power for the main
+    contrasts at the published MDE, without the exploratory D3/E1/M1 cells.
+  base:
+    model: gpt-5.6-luna
+    reasoning_effort: low
+    temperature: 0.0
+    caching: "off"
+    repeats: 3
+    surface_size: 50
+    schema_detail: standard
+    response_shape: as-is
+    error_detail: field-scoped
+    doc_budget: standard
+    mcp_revision: "2026-07-28"
+  include:
+    presets: [Z0, Z1, A1, A2, B1, B2, B1-auth, B2-auth, C1, D1, D2, D2-auth]
+  tasks:
+    generate: {seed: 1, cores: 40, fan_out: 8, difficulty: hard}
+  budget: {max_usd: 150}
+  confirmatory:
+    - contrast: [A1, A2]
+      hypothesis: Meta-tool discovery cuts static context at equal success.
+    - contrast: [B1, B1-auth]
+      hypothesis: An authored skill beats a generated one on the same transport.
+    - contrast: [D1, D2-auth]
+      hypothesis: Code sandbox plus authored skill is the composite winner.

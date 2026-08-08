@@ -1,0 +1,23 @@
+# Cheapest end-to-end check that the pipeline works. Not a result.
+run_plan:
+  id: smoke
+  rationale: >
+    Prove install and credentials before a real matrix: three arms, two cores,
+    one repeat. Numbers from this plan must never be reported as findings.
+  base:
+    model: gpt-5.6-luna
+    reasoning_effort: low
+    temperature: 0.0
+    caching: "off"
+    repeats: 1
+    surface_size: 0
+    schema_detail: standard
+    response_shape: as-is
+    error_detail: field-scoped
+    doc_budget: standard
+    mcp_revision: "2026-07-28"
+  include:
+    presets: [Z0, A1, D1]
+  tasks:
+    generate: {seed: 1, cores: 2, fan_out: 8, difficulty: standard}
+  budget: {max_usd: 5}

@@ -1,0 +1,24 @@
+# First contact with a target. Gold-free metrics; throw away and re-run.
+run_plan:
+  id: probe
+  rationale: >
+    First contact with a live or controlled target: five packaging points,
+    one repeat, no resume. Measures whether the surface is usable at all —
+    not which packaging wins.
+  base:
+    model: gpt-5.6-luna
+    reasoning_effort: low
+    temperature: 0.0
+    caching: "off"
+    repeats: 1
+    surface_size: 0
+    schema_detail: standard
+    response_shape: as-is
+    error_detail: field-scoped
+    doc_budget: standard
+    mcp_revision: "2026-07-28"
+  include:
+    presets: [Z0, A1, A2, C1, D1]
+  tasks:
+    generate: {seed: 1, cores: 5, fan_out: 8, difficulty: standard}
+  budget: {max_usd: 40}

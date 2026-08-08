@@ -105,6 +105,32 @@ a number from a spreadsheet.
   `unvalidated`, or `heuristic`. Field mode ships unvalidated metrics; that is
   acceptable only because it is stated on the artifact.
 
+## Operation ledger
+
+After the mechanism metrics, the report names **which parts of the API** agents
+lean on and misuse — so you know what to document, hide, or redesign. Built at
+report time from traces; nothing in the agent loop changes.
+
+Resolution is by packaging *axes* (transport / discovery / invocation), never by
+arm name — a custom arm that behaves like A1 is scored like A1.
+
+**Core rates** (per target operation): usage share, error rate, forbidden rate,
+off-gold rate (needs a gold path), redundant rate. Discovery meta-tools
+(`search` / `describe`) are footnoted, not mixed into the product chart.
+
+**Three blocks:**
+
+| Block | What it shows |
+|---|---|
+| **A. Over-touch** | Usage minus gold-expected share — what agents hit beyond the task. Without gold, falls back to raw usage and says so. |
+| **B. Stumble by kind** | Wrong-route, call-error, and forbidden ranked separately. A blended “misuse” score is secondary only. |
+| **C. Family + arm deltas** | Resource families (episodes, assets, …) and descriptive packaging contrasts on shared ops. Not confirmatory; no MDE claim. |
+
+Signals the run cannot measure (no `gold_call_sequence`, shell/code bodies only
+parsed from text) are labelled **unavailable** or `[parsed]` — never shown as a
+quiet zero. Volume is not blame; HTTP-clean calls can still harm; unanswerable
+thrash is an abstention story, not an endpoint outage.
+
 ## Reading a single run
 
 ```bash

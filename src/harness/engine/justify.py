@@ -64,15 +64,37 @@ class SweepEffect:
                 f"({self.n_cores} cores) — {verdict}")
 
 
-def _sweep_levels(report: Report) -> dict[str, list[str]]:
-    """Arm labels carry the swept level as `ARM@level`."""
+def _sweep_levels(report: Report, axis: str = "error_detail") -> dict[str, list[str]]:
+    """Arm labels carry swept levels; parse with ``split_label`` so both
+    ``A1@terse`` and ``A1@error_detail=terse`` contribute to the same axis."""
+    from .axes import split_label
+
     levels: dict[str, set[str]] = {}
     for name in report.arms:
-        if "@" not in name:
+        base, overrides = split_label(name)
+        if axis not in overrides:
             continue
-        base, level = name.split("@", 1)
-        levels.setdefault(base, set()).add(level)
+        levels.setdefault(base, set()).add(overrides[axis])
     return {k: sorted(v) for k, v in levels.items() if len(v) > 1}
+
+
+def _arm_label(base: str, axis: str, level: str, report: Report) -> str | None:
+    """Find the ledger key for ``base`` at ``axis=level``, any label form."""
+    from .axes import format_label, split_label
+
+    candidates = (
+        format_label(base, {axis: level}),
+        f"{base}@{level}",
+        f"{base}@{axis}={level}",
+    )
+    for c in candidates:
+        if c in report.arms:
+            return c
+    for name in report.arms:
+        b, overrides = split_label(name)
+        if b == base and overrides.get(axis) == level:
+            return name
+    return None
 
 
 def effects(report: Report, axis: str = "error_detail") -> list[SweepEffect]:
@@ -87,13 +109,15 @@ def effects(report: Report, axis: str = "error_detail") -> list[SweepEffect]:
         return []
 
     out: list[SweepEffect] = []
-    for base, levels in _sweep_levels(report).items():
+    for base, levels in _sweep_levels(report, axis).items():
         baseline = levels[0]
-        base_arm = report.arms.get(f"{base}@{baseline}")
+        base_key = _arm_label(base, axis, baseline, report)
+        base_arm = report.arms.get(base_key) if base_key else None
         if not base_arm or base_arm.success_rate is None:
             continue
         for level in levels[1:]:
-            arm = report.arms.get(f"{base}@{level}")
+            key = _arm_label(base, axis, level, report)
+            arm = report.arms.get(key) if key else None
             if not arm or arm.success_rate is None:
                 continue
             out.append(SweepEffect(

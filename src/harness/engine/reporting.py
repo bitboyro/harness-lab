@@ -209,6 +209,12 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None,
         lines += ["", "  lint-rule evidence:"]
         lines.append(report_status(report))
 
+    # --- operation ledger (customer payoff) --------------------------------
+    if report.op_ledger is not None and (
+            report.op_ledger.calls or report.op_ledger.excluded_arms
+    ):
+        lines += ["", report.op_ledger.render()]
+
     lines += ["", _footer(report_class, report.truncated_count)]
     if glossary:
         from .glossary import render_text
