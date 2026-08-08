@@ -14,7 +14,7 @@ Ranking is frozen at build time so repeated runs see identical results — real
 APIs rank, and omitting ranking would bias against the discovery arms that would
 naturally lean on it.
 
-Contract: docs/reference/decisions.md O2; docs/reference/packaging-axes.md#axes
+Contract: archive/reference/decisions.md O2; archive/reference/packaging-axes.md#axes
 """
 
 from __future__ import annotations

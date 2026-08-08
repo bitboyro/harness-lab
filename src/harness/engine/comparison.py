@@ -21,7 +21,7 @@ module:
     reads as a zero. Only `shared_arms` enter the head-to-head; the rest are
     reported standalone in their own section.
 
-Contract: docs/reference/statistics.md#comparing-runs
+Contract: archive/reference/statistics.md#comparing-runs
 """
 
 from __future__ import annotations

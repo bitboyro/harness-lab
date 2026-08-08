@@ -880,7 +880,9 @@ def cmd_init(args: argparse.Namespace) -> int:
     chosen = list(targets) if args.agent == "both" else [args.agent]
 
     source = resources.files("harness") / "agent_skills"
-    written = 0
+    # Count distinct skills, not writes: `--agent both` copies each one twice,
+    # and "6 skills installed" when there are three reads as a different product.
+    written: set[str] = set()
     for agent in chosen:
         root = args.dir / targets[agent]
         root.mkdir(parents=True, exist_ok=True)
@@ -893,7 +895,7 @@ def cmd_init(args: argparse.Namespace) -> int:
                 continue
             shutil.copytree(str(skill), destination, dirs_exist_ok=True)
             print(f"  wrote {destination}")
-            written += 1
+            written.add(skill.name)
 
     template = args.dir / "packs" / "template.yaml"
     if not template.exists() or args.force:
@@ -901,8 +903,8 @@ def cmd_init(args: argparse.Namespace) -> int:
         template.write_text(_PACK_TEMPLATE)
         print(f"  wrote {template}")
 
-    print(f"\n{written} skill(s) installed. Ask your agent: "
-          f'"help me test my API with harness".')
+    print(f"\n{len(written)} skill(s) installed: {', '.join(sorted(written))}")
+    print('Ask your agent: "help me test my API with harness".')
     return 0
 
 

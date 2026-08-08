@@ -7,7 +7,7 @@ cells are compared, not from restricting what the tool can express.
 No total budget is committed. Spend is gated per phase, and nothing executes
 until a human has seen the projected cost.
 
-Contract: docs/reference/packaging-axes.md#matrix-selection
+Contract: archive/reference/packaging-axes.md#matrix-selection
 """
 
 from __future__ import annotations

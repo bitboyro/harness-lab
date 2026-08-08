@@ -18,8 +18,19 @@ __pycache__/
 build/
 dist/
 
-# Superseded docs, kept on disk during the restructure and on the
-# archive/p0-contracts branch. Never shipped.
+# Everything we keep but do not distribute. Two kinds live here, and the
+# difference matters:
+#
+#   reference/, ROADMAP.md  — current and load-bearing. The reference contracts
+#                             are the rationale `Contract:` docstrings cite by
+#                             anchor; the roadmap is internal planning. Neither
+#                             is a customer's business, so neither is in the
+#                             repo or the bundle.
+#   everything else         — genuinely superseded design records, also kept on
+#                             the archive/p0-contracts branch.
+#
+# tests/test_docs.py checks the citations in full when this directory is
+# present and skips when it is not, so a checkout without it still passes.
 archive/
 
 # Local noise

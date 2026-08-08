@@ -9,7 +9,7 @@ the lint rules are about properties of the API itself, so the evidence has to
 come from varying that property while holding everything else fixed. Comparing
 A1 to D1 says nothing about whether error messages should name the field.
 
-Contract: docs/reference/decisions.md G2
+Contract: archive/reference/decisions.md G2
 """
 
 from __future__ import annotations

@@ -13,7 +13,7 @@ So a matrix sized for main effects is quietly underpowered for the interaction â
 which is the headline result. This module makes that visible at the point where
 the number is chosen, instead of leaving it in a document nobody re-reads.
 
-Contract: docs/reference/statistics.md#power-and-mde
+Contract: archive/reference/statistics.md#power-and-mde
 """
 
 from __future__ import annotations

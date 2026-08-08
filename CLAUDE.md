@@ -85,7 +85,7 @@ experiment/   the fictional catalog API, seeder, answer keys, grader
 
 ## Invariants that are easy to break
 
-These are load-bearing for the research claims, not style preferences. Most have a test behind them; all have a rationale in `docs/reference/decisions.md`.
+These are load-bearing for the research claims, not style preferences. Most have a test behind them; all have a rationale in `archive/reference/decisions.md`.
 
 - **Isolation is per run.** Each run gets its own seeded API instance and ephemeral port, so mutating tasks parallelize safely and nothing contaminates the next cell.
 - **Never pool** across `model`, `mcp_revision`, skill condition (generated vs. authored), or report class (controlled vs. field). `harness compare` prints `REFUSING TO POOL` and exits 3 when a boundary breaks — that exit code is what makes `harness compare a b && publish` refuse.
@@ -101,21 +101,30 @@ These are load-bearing for the research claims, not style preferences. Most have
 
 ## Docs are contracts, not notes
 
-`docs/` is the reasoning trail, and code comments cite it by ID (`L1`, `F4`, `G6`, `V9`, `API-8`, `RQ3`). Read the relevant one before changing behaviour it describes.
+Docs are the reasoning trail, and code comments cite them by ID (`L1`, `F4`, `G6`, `V9`, `API-8`, `RQ3`). Read the relevant one before changing behaviour it describes.
 
-| File | Role |
-|---|---|
-| `install.md`, `your-api.md`, `controlled-rig.md`, `reading-results.md` | The four reader-facing guides |
-| `task-packs.md` | Frozen contract: the interop format that makes bring-your-own-API possible |
-| `reference/experiment-design.md` | Research requirements: RQs, the test API, metrics, validity controls |
-| `reference/packaging-axes.md` | Frozen contract: axes, plugin interface, preset table |
-| `reference/statistics.md` | Model, power/MDE, confirmatory vs. exploratory split — written before any matrix ran |
-| `reference/decisions.md` | **The reasoning.** Stable IDs (F/G/O) that code cites; treat them as an API |
+**`docs/` ships. `archive/` does not.** That split is a distribution decision, not a statement about which is current — the reference contracts under `archive/reference/` are as live as anything in the repo, they are just not a customer's business.
+
+| File | Ships | Role |
+|---|---|---|
+| `docs/install.md`, `your-api.md`, `controlled-rig.md`, `reading-results.md` | yes | The four reader-facing guides |
+| `docs/task-packs.md` | yes | Frozen contract: the interop format that makes bring-your-own-API possible |
+| `archive/reference/experiment-design.md` | no | Research requirements: RQs, the test API, metrics, validity controls |
+| `archive/reference/packaging-axes.md` | no | Frozen contract: axes, plugin interface, preset table |
+| `archive/reference/statistics.md` | no | Model, power/MDE, confirmatory vs. exploratory split — written before any matrix ran |
+| `archive/reference/decisions.md` | no | **The reasoning.** Stable IDs (F/G/O) that code cites; treat them as an API |
+| `archive/ROADMAP.md` | no | Internal planning |
 
 Code cites these by **slug anchor**, not section number — a number drifts
-silently, a renamed heading fails `tests/test_docs.py`. Superseded design
-records (`plan.md`, `plan-review.md`, the proposals) live on the
-`archive/p0-contracts` branch.
+silently, a renamed heading fails `tests/test_docs.py`. That test checks the
+`archive/reference/` citations in full when the directory is present and skips
+when it is not, so a checkout without the research trail still passes.
+Genuinely superseded records (`plan.md`, `plan-review.md`, the proposals) sit
+beside them, and on the `archive/p0-contracts` branch.
+
+**Nothing under `docs/` may link into `archive/`** — a shipped doc must not
+point at a file the reader does not have. Cite the decision ID in prose
+instead.
 
 When behaviour changes, amend the doc in the same commit — with an `⚠ AMENDED` marker rather than a silent rewrite, so a reader meets the argument instead of the omission.
 
@@ -125,5 +134,5 @@ When behaviour changes, amend the doc in the same commit — with an `⚠ AMENDE
 - Renderers never recompute; they take a `Report`. New output formats go alongside `comparison_html.py` / `comparison_csv.py`, reading the same object.
 - `results/` and `traces/` are gitignored, except that `results.jsonl` and `manifest.json` for published runs **are** committed — those are what a reader needs to check a claim. Full traces are published separately as a corpus.
 - `src/harness/experiment/skills/catalog.md` is the rig's authored skill for the `-auth` arms — a fixture of the experiment, not a user-facing feature. Editing it after results exist invalidates the V9 pre-registration.
-- `src/harness/agent_skills/` is the canonical source of the two client-facing workflow skills (`harness-field-pack`, `harness-insights`). They ship inside the wheel; `harness init --agent claude|cursor|both` writes them into any project, including this one. Do not check a second copy into `.cursor/` — it drifts.
+- `src/harness/agent_skills/` is the canonical source of the three client-facing workflow skills: `harness-lab` (the router — install, command ladder, what a result supports), `harness-field-pack` (surface → pack → run), `harness-insights` (results → brief). They ship inside the wheel; `harness init --agent claude|cursor|both` copies every directory it finds there, so a new skill needs no CLI change. Do not check a second copy into `.cursor/` — it drifts.
 - **`skills/<api>.md` at the cwd stays a user convention**: it is where somebody testing their own API puts their authored skill.

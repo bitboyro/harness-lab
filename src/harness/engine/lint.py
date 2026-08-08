@@ -7,7 +7,7 @@ A rule that points at a measured effect size is a defensible claim. A rule that
 does not is somebody's opinion, and it renders as ``heuristic`` so a reader can
 tell the difference. Back-filling those citations is the point of P4.
 
-Contract: docs/reference/decisions.md G2
+Contract: archive/reference/decisions.md G2
 """
 
 from __future__ import annotations

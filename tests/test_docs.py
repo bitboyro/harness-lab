@@ -1,9 +1,15 @@
 """Docs are contracts, so the citations have to resolve.
 
-Code cites docs by anchor (`Contract: docs/reference/statistics.md#power-and-mde`).
+Code cites docs by anchor (`Contract: archive/reference/statistics.md#power-and-mde`).
 Anchors were chosen over the section numbers this project used to cite because a
 number drifts silently on every edit — a renamed heading breaks loudly here
 instead of quietly pointing a reader at the wrong paragraph.
+
+The reference contracts live under `archive/`, which is gitignored and does not
+ship. That is a distribution decision, not a demotion: they are still the live
+rationale the code cites. So these checks run in full for anyone holding the
+research trail, and skip — never fail — for someone working from a checkout
+that never had it. A missing internal doc is not a broken build for them.
 """
 
 from __future__ import annotations
@@ -15,10 +21,16 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
+REFERENCE = ROOT / "archive" / "reference"
 
-#: `Contract: docs/a.md#x, #y; b.md#z` — one prefix, several targets.
+#: Whether the internal contracts are present in this working copy.
+HAVE_REFERENCE = REFERENCE.is_dir()
+needs_reference = pytest.mark.skipif(
+    not HAVE_REFERENCE, reason="archive/reference is internal and not distributed")
+
+#: `Contract: docs/a.md#x, #y; archive/reference/b.md#z` — one prefix, several targets.
 _CONTRACT = re.compile(r"Contract:\s*(.+)")
-_TARGET = re.compile(r"(?:(docs/[\w/\-.]+\.md))?(#[\w\-]+)?")
+_DOC_PATH = r"(?:docs|archive)/[\w/\-.]+\.md"
 
 #: Markdown links, minus external ones.
 _LINK = re.compile(r"\[[^\]]*\]\((\.{1,2}/[^)\s]+)\)")
@@ -49,7 +61,7 @@ def _contract_citations() -> list[tuple[Path, str, str]]:
                 chunk = chunk.strip()
                 if not chunk:
                     continue
-                path = re.match(r"(docs/[\w/\-.]+\.md)", chunk)
+                path = re.match(rf"({_DOC_PATH})", chunk)
                 if path:
                     current = path.group(1)
                 anchor = re.search(r"(#[\w\-]+)", chunk)
@@ -71,6 +83,8 @@ def test_there_are_citations_to_check() -> None:
     ids=[f"{s.name}->{d}{a}" for s, d, a in CITATIONS])
 def test_every_contract_citation_resolves(source: Path, doc: str, anchor: str) -> None:
     target = ROOT / doc
+    if doc.startswith("archive/") and not HAVE_REFERENCE:
+        pytest.skip("archive/reference is internal and not distributed")
     assert target.is_file(), f"{source.name} cites {doc}, which does not exist"
     if anchor:
         available = _slugs(target.read_text())
@@ -94,13 +108,14 @@ def test_no_dangling_links_between_docs() -> None:
     assert not broken, "dangling links:\n  " + "\n  ".join(broken)
 
 
+@needs_reference
 def test_the_decision_ids_the_code_cites_still_exist() -> None:
     """Decision IDs are an API.
 
     A path that resolves while the ID means something else is worse than a
     broken link, so the IDs are checked separately from the file.
     """
-    decisions = (DOCS / "reference" / "decisions.md").read_text()
+    decisions = (REFERENCE / "decisions.md").read_text()
     cited = set()
     for py in (ROOT / "src").rglob("*.py"):
         for raw in py.read_text().splitlines():

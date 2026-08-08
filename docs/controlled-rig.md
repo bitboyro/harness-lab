@@ -123,8 +123,8 @@ harness plan examples/plan.yaml --strict   # require the pre-registered split
 
 The point is the `confirmatory` block: contrasts fixed before results exist, so
 none can be added after seeing them. See
-[examples/plan.yaml](../examples/plan.yaml) and
-[reference/statistics.md](./reference/statistics.md#confirmatory-vs-exploratory).
+[examples/plan.yaml](../examples/plan.yaml); `--strict` refuses a plan whose
+confirmatory set does not match the one declared in code.
 
 ## Disk
 

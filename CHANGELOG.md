@@ -5,16 +5,34 @@ Versions follow [semver](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`harness-lab` skill** — the one that fires on "what is this", "which
+  command do I run", or an error. It checks the install, picks a target, walks
+  the cost ladder, and carries the refusals into whatever the agent reports:
+  a lead under the MDE is a tie, a probe cannot crown a winner, and no run
+  spends without the user's approval. `harness init` installs it alongside
+  `harness-field-pack` and `harness-insights`; it copies whatever it finds, so
+  a new skill needs no CLI change.
+
 ### Changed
 
 - Documentation restructured around readers rather than project chronology:
-  five task-oriented guides under `docs/`, four contracts under
-  `docs/reference/`, and three files at the root. Superseded design records are
-  kept on the `archive/p0-contracts` branch.
+  five task-oriented guides under `docs/`, and two files at the root.
 - Code now cites documentation by **slug anchor** instead of section number. A
   section number drifts silently on every edit; a renamed heading now fails
   `tests/test_docs.py` loudly. Decision IDs (`F1`–`F4`, `G1`–`G13`, `O1`–`O8`)
   are treated as a stable API and checked.
+- **Documentation is now the five guides, and nothing else.** The research
+  design and internal planning are no longer distributed. They remain current
+  and load-bearing where they live — the `Contract:` docstrings throughout the
+  source still cite them by anchor, so a reader of the code will see references
+  to material they do not have. That is deliberate rather than an oversight.
+  Two tests hold the line: doc citations are checked in full wherever the
+  originals are present and skipped where they are not, and no shipped guide or
+  skill may link to a file the recipient was not given.
+- `harness-field-pack` pointed at four documentation files that the
+  restructure had deleted.
 
 ## [0.1.0] — 2026-08-08
 

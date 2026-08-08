@@ -9,7 +9,7 @@ not have) no longer applies.
 This is the one check that can void the entire experiment, so it fails loudly
 and refuses to be waived.
 
-Contract: docs/reference/experiment-design.md#contamination-gate
+Contract: archive/reference/experiment-design.md#contamination-gate
 """
 
 from __future__ import annotations

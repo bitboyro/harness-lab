@@ -11,6 +11,36 @@ better, and what that cost.
 harness lint --demo     # free, no API key, one second
 ```
 
+## Why run commands, when your agent can do it for you?
+
+Most of the work in a packaging study is not running the tool — it is deciding
+what to test, writing tasks that a public model can't already answer, picking
+arms your API actually supports, and refusing to overclaim the result. That is
+work an agent is good at, so it ships as skills rather than as a manual.
+
+```bash
+harness init --agent claude     # or cursor, or both
+```
+
+Then, in Claude Code or Cursor:
+
+> **help me test my API with harness**
+
+Three skills are installed, and your agent picks whichever fits:
+
+| Skill | Fires when | What it does |
+|---|---|---|
+| **harness-lab** | "what is this", "which command", "it broke" | Checks the install, picks the target, walks the cost ladder, and holds the line on what a result supports |
+| **harness-field-pack** | "test *my* API" | Discovers your surface, drafts and fills a task pack, sets safety defaults, chooses arms and suite size |
+| **harness-insights** | "give me a brief" | Turns a finished results directory into a narrative `insights.html` |
+
+They know the parts that are easy to get wrong: never pooling incomparable
+runs, that a lead under the MDE is a tie, that a probe cannot crown a winner,
+and that spend needs your approval first. `harness init` also drops a
+`packs/template.yaml` to start from.
+
+Nothing here is agent-only. Every command below works on its own.
+
 ## Three steps, increasing in cost
 
 | | Cost | What you learn |
@@ -105,9 +135,8 @@ about the sandbox arms, in [docs/install.md](./docs/install.md).
 | [task-packs.md](./docs/task-packs.md) | Writing tasks — the pack format |
 | [controlled-rig.md](./docs/controlled-rig.md) | The built-in experiment |
 | [reading-results.md](./docs/reading-results.md) | What the numbers mean |
-| [reference/](./docs/reference/) | Contracts the code cites by anchor |
 
-[CHANGELOG](./CHANGELOG.md) · [ROADMAP](./ROADMAP.md)
+[CHANGELOG](./CHANGELOG.md)
 
 ## Status
 

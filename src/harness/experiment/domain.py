@@ -15,7 +15,7 @@ Answers must also be *unguessable*: runtimes, ratings and ids are drawn from the
 seeded world, never inferable from the question. A task whose answer can be
 reasoned out without calling the API measures reasoning, not tool use.
 
-Contract: docs/reference/experiment-design.md#the-test-api, #grading
+Contract: archive/reference/experiment-design.md#the-test-api, #grading
 """
 
 from __future__ import annotations

@@ -6,7 +6,7 @@ prose. What V1 does not do — and what V2 wrongly tried to do — is equalise
 length: static context size is a real causal property of the packaging choice,
 so it is measured and swept (``doc_budget``), never padded to parity.
 
-Contract: docs/reference/decisions.md G5; docs/reference/experiment-design.md#validity-controls
+Contract: archive/reference/decisions.md G5; archive/reference/experiment-design.md#validity-controls
 """
 
 from __future__ import annotations

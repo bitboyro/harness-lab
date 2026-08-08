@@ -16,7 +16,7 @@ cannot import `experiment`, so the rig's implementation of this protocol lives
 in `experiment/rig.py` and arrives as an argument — the rig is a consumer of the
 same interface a field user gets, which is exactly what the seam is for.
 
-Contract: docs/reference/decisions.md G9
+Contract: archive/reference/decisions.md G9
 """
 
 from __future__ import annotations
