@@ -30,12 +30,12 @@ Rules:
 | T2.7 | Artifacts: render-on-demand, sandbox CSP, traversal guard | S2 | T2.2 | `api/` | `../../etc/passwd` rejected | todo | |
 | T2.8 | Compare endpoint incl. exit-3 refusal payload | S2 | T2.2 | `api/` | Cross-model pair refuses | todo | |
 | T2.9 | SPA fallback controller | S2 | T2.1 | `api/web/` | Deep link survives refresh | todo | |
-| T3.1 | Next app, static export, Tailwind, API client | S3 | T0.1 | `web/` | `npm run build` → `out/` | todo | |
-| T3.2 | Targets + Lint pages | S3 | T3.1 | `web/` | Against stub API | todo | |
-| T3.3 | Pack editor with live validation | S3 | T3.1 | `web/` | Bad pack shows Python message | todo | |
-| T3.4 | Run config → projection → approve → progress | S3 | T3.1 | `web/` | Polling stops when terminal | todo | |
-| T3.5 | Results, artifact viewer iframe, compare page | S3 | T3.1 | `web/` | Sorting works, `window.parent` fails | todo | |
-| T3.6 | PWA manifest + service worker | S3 | T3.2–T3.5 | `web/public/` | Offline report opens | todo | |
+| T3.1 | Next app, static export, Tailwind, API client | S3 | T0.1 | `web/` | `npm run build` → `out/` | done | s3 |
+| T3.2 | Targets + Lint pages | S3 | T3.1 | `web/` | Against stub API | done | s3 |
+| T3.3 | Pack editor with live validation | S3 | T3.1 | `web/` | Bad pack shows Python message | done | s3 |
+| T3.4 | Run config → projection → approve → progress | S3 | T3.1 | `web/` | Polling stops when terminal | done | s3 |
+| T3.5 | Results, artifact viewer iframe, compare page | S3 | T3.1 | `web/` | Sorting works, `window.parent` fails | done | s3 |
+| T3.6 | PWA manifest + service worker | S3 | T3.2–T3.5 | `web/public/` | Offline report opens | done | s3 |
 | T4.1 | Dockerfile: 3 stages, pinned `--tag` | S4 | T0.3 | `Dockerfile` | `docker build` clean | blocked | s4 — files written; full `docker build` needs S2 `api/src` + S3 `web/` (`package-lock.json`, `output: 'export'` → `out/`); daemon also down here |
 | T4.2 | compose: loopback, env_file, /data volume | S4 | T4.1 | `docker-compose.yml` | `ps` shows `127.0.0.1:8085->` | blocked | s4 — compose written (`127.0.0.1:8085`, `../.env`, `./harness-data:/data`); `compose config` ok; `up` blocked on T4.1 |
 | T4.3 | `harness doctor` green inside the image | S4 | T4.1 | `scripts/smoke-doctor.sh` | python, curl, version | blocked | s4 — `smoke-doctor.sh` builds `--target runtime-base`; Docker daemon not running in this environment |

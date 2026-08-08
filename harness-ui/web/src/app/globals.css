@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f4f4f5;
+  --fg: #18181b;
+  --muted: #52525b;
+  --line: #d4d4d8;
+  --card: #ffffff;
+  --accent: #1e3a5f;
+  --danger: #7f1d1d;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "IBM Plex Sans", "Source Sans 3", "Segoe UI", sans-serif;
+  line-height: 1.5;
+}
+
+code,
+pre,
+.font-mono {
+  font-family: "IBM Plex Mono", "Source Code Pro", ui-monospace, monospace;
+}
+
+a {
+  color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
