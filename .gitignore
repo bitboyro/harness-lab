@@ -1,0 +1,27 @@
+.env
+.env.*
+!.env.example
+
+# Run output. Nothing under results/ is committed: a ledger is only meaningful
+# beside the traces and manifest that produced it, and those are hundreds of MB
+# per matrix. Published runs go out as a separate corpus, per spec §6.4
+# deliverable 6 — not as repo history.
+results/
+traces/
+
+# Build artifacts
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Superseded docs, kept on disk during the restructure and on the
+# archive/p0-contracts branch. Never shipped.
+archive/
+
+# Local noise
+.DS_Store
+.playwright-mcp/

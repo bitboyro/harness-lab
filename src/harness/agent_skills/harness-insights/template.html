@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{RUN_ID}} — what the numbers mean</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1c2421;
+    --ink-soft: #3d4a45;
+    --muted: #6b7872;
+    --paper: #f3f0e8;
+    --paper-2: #e8e4d8;
+    --line: #d4cfc0;
+    --accent: #0f6e56;
+    --accent-soft: #d8efe6;
+    --warn: #9a4e12;
+    --warn-soft: #f3e4d4;
+    --danger: #9b2c2c;
+    --danger-soft: #f3d9d6;
+    --bar: #1a5c4a;
+    --bar-muted: #b7c4be;
+    --max: 720px;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font: 400 17px/1.65 Outfit, system-ui, sans-serif;
+    background:
+      radial-gradient(1200px 600px at 12% -10%, #dff0e8 0%, transparent 55%),
+      radial-gradient(900px 500px at 100% 8%, #efe6d4 0%, transparent 50%),
+      var(--paper);
+    min-height: 100vh;
+  }
+
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 48px 22px 96px; }
+
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: Fraunces, Georgia, serif;
+    font-weight: 650;
+    font-size: clamp(2rem, 5vw, 2.75rem);
+    line-height: 1.12;
+    letter-spacing: -0.025em;
+    margin: 0 0 18px;
+  }
+
+  .lede {
+    font-size: 1.15rem;
+    color: var(--ink-soft);
+    max-width: 38em;
+    margin: 0 0 28px;
+  }
+
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 8px 18px;
+    font-size: 13px; color: var(--muted);
+    padding-bottom: 36px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 40px;
+  }
+
+  .verdict {
+    background: var(--accent-soft);
+    border-left: 4px solid var(--accent);
+    padding: 22px 24px;
+    margin: 0 0 48px;
+    border-radius: 0 10px 10px 0;
+  }
+  .verdict h2 {
+    font-family: Fraunces, Georgia, serif;
+    font-size: 1.35rem;
+    font-weight: 650;
+    margin: 0 0 8px;
+    letter-spacing: -0.015em;
+  }
+  .verdict p { margin: 0; color: var(--ink-soft); }
+  .verdict .why {
+    margin-top: 12px;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+  }
+
+  .picks {
+    display: grid;
+    gap: 14px;
+    margin: 0 0 48px;
+  }
+  .pick {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px 22px 18px;
+    background: color-mix(in oklab, white 55%, var(--paper));
+  }
+  .pick.careful {
+    border-color: color-mix(in oklab, var(--accent) 35%, var(--line));
+    background: color-mix(in oklab, var(--accent-soft) 70%, white);
+  }
+  .pick .job {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 6px;
+  }
+  .pick.careful .job { color: var(--accent); }
+  .pick h3 {
+    font-family: Fraunces, Georgia, serif;
+    font-size: 1.25rem;
+    font-weight: 650;
+    margin: 0 0 6px;
+    letter-spacing: -0.015em;
+  }
+  .pick .arm {
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .pick .stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin: 10px 0 12px;
+    font-size: 0.88rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-soft);
+  }
+  .pick .stats b { color: var(--ink); font-weight: 600; }
+  .pick p {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+    line-height: 1.5;
+  }
+  .pick .caveat {
+    margin-top: 10px;
+    font-size: 0.88rem;
+    color: var(--warn);
+  }
+
+  section { margin: 0 0 52px; }
+  section h2 {
+    font-family: Fraunces, Georgia, serif;
+    font-size: 1.45rem;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    margin: 0 0 10px;
+  }
+  section > p {
+    color: var(--ink-soft);
+    margin: 0 0 20px;
+    max-width: 40em;
+  }
+
+  .insight {
+    display: grid;
+    gap: 18px;
+    margin: 0 0 22px;
+  }
+  .insight article {
+    padding: 20px 0;
+    border-top: 1px solid var(--line);
+  }
+  .insight article:first-child { border-top: none; padding-top: 0; }
+  .insight h3 {
+    font-family: Fraunces, Georgia, serif;
+    font-size: 1.15rem;
+    font-weight: 650;
+    margin: 0 0 8px;
+    letter-spacing: -0.015em;
+  }
+  .insight p { margin: 0; color: var(--ink-soft); }
+  .insight .fig {
+    display: inline-block;
+    font-family: Fraunces, Georgia, serif;
+    font-weight: 650;
+    font-size: 1.05rem;
+    color: var(--accent);
+    margin-right: 4px;
+  }
+
+  .ladder {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .ladder li {
+    display: grid;
+    grid-template-columns: 7.5rem 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.95rem;
+  }
+  .ladder li:first-child { border-top: 1px solid var(--line); }
+  .ladder .name { font-weight: 600; }
+  .ladder .desc { color: var(--muted); font-size: 0.82rem; }
+  .ladder .track {
+    height: 8px;
+    background: var(--paper-2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .ladder .fill {
+    height: 100%;
+    background: var(--bar);
+    border-radius: 3px;
+  }
+  .ladder .fill.muted { background: var(--bar-muted); }
+  .ladder .pct {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    min-width: 2.6rem;
+    text-align: right;
+  }
+  .ladder .win .name { color: var(--accent); }
+  .ladder .ctl .name, .ladder .ctl .pct { color: var(--muted); font-weight: 500; }
+
+  .deltas {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin-top: 8px;
+  }
+  .delta {
+    background: color-mix(in oklab, white 55%, var(--paper));
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 16px 14px;
+  }
+  .delta .label { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+  .delta .num {
+    font-family: Fraunces, Georgia, serif;
+    font-size: 1.7rem;
+    font-weight: 650;
+    color: var(--accent);
+    margin: 4px 0 2px;
+    letter-spacing: -0.02em;
+  }
+  .delta p { margin: 0; font-size: 0.88rem; color: var(--ink-soft); line-height: 1.45; }
+
+  .callout {
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin: 18px 0 0;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+  }
+  .callout.warn { background: var(--warn-soft); border-left: 3px solid var(--warn); }
+  .callout.danger { background: var(--danger-soft); border-left: 3px solid var(--danger); }
+  .callout strong { color: var(--ink); font-weight: 600; }
+
+  .fail-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .fail-list li {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+    align-items: baseline;
+  }
+  .fail-list .n {
+    font-family: Fraunces, Georgia, serif;
+    font-weight: 650;
+    font-size: 1.25rem;
+    color: var(--ink);
+    min-width: 1.5rem;
+  }
+  .fail-list .t { font-weight: 600; margin: 0 0 2px; }
+  .fail-list .h { margin: 0; font-size: 0.9rem; color: var(--muted); }
+
+  .takeaways {
+    background: color-mix(in oklab, white 50%, var(--paper));
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 22px 24px;
+  }
+  .takeaways ol {
+    margin: 0;
+    padding-left: 1.2rem;
+    color: var(--ink-soft);
+  }
+  .takeaways li { margin: 0 0 12px; padding-left: 4px; }
+  .takeaways li:last-child { margin-bottom: 0; }
+  .takeaways strong { color: var(--ink); }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  footer a { color: var(--accent); }
+
+  @media (max-width: 560px) {
+    .ladder li { grid-template-columns: 1fr auto; grid-template-rows: auto auto; }
+    .ladder .track { grid-column: 1 / -1; order: 3; }
+    .ladder .pct { order: 2; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- === HERO ============================================================
+       Fill from brief.run + narrative. Do not invent model/task/run counts.
+  -->
+  <p class="eyebrow">Harness lab · {{RUN_ID}}</p>
+  <h1>{{TITLE}}</h1>
+  <p class="lede">{{LEDE}}</p>
+  <div class="meta">
+    <span>{{MODEL}} · reasoning {{REASONING}}</span>
+    <span>{{TASKS}} tasks · {{REPEATS}} repeats · {{DIFFICULTY}}</span>
+    <span>{{N_ROWS}} runs · {{DATE}}</span>
+  </div>
+
+  <!-- === VERDICT =========================================================
+       Prefer brief.verdict.winner (composite). Headline = ship recommendation.
+       Stats line: success · abstention · harm · one cost/efficiency contrast.
+       .why must mention MDE when caveats say the success gap is below it.
+  -->
+  <div class="verdict">
+    <h2>Ship {{WINNER}} — {{WINNER_NAME}}</h2>
+    <p>
+      <strong>{{WINNER_SUCCESS}}</strong> success ·
+      <strong>{{WINNER_ABSTAIN}}</strong> correct refusals ·
+      <strong>{{WINNER_HARM}}</strong> data clobbers ·
+      {{WINNER_EFFICIENCY_NOTE}}.
+    </p>
+    <p class="why">{{WINNER_WHY}}</p>
+  </div>
+
+  <!-- === THREE PICKS =====================================================
+       ALWAYS use brief.picks.{careful,fastest,cheapest} — never re-rank.
+       Omit a card only if that pick is null (e.g. no pricing → no cheapest).
+       careful gets class "pick careful"; others "pick".
+  -->
+  <section>
+    <h2>Three jobs, three picks</h2>
+    <p>
+      Same model, different packaging. Choose by what you optimise for —
+      not by the composite score alone.
+    </p>
+    <div class="picks">
+      <article class="pick careful">
+        <p class="job">When you must not be wrong</p>
+        <h3><span class="arm">{{CAREFUL_ARM}}</span> — {{CAREFUL_TAGLINE}}</h3>
+        <div class="stats">
+          <span><b>{{CAREFUL_PRECISION}}</b> precision</span>
+          <span><b>{{CAREFUL_ABSTENTION}}</b> abstention</span>
+          <span><b>{{CAREFUL_FP}}</b> false answers</span>
+          <span><b>{{CAREFUL_HARM}}</b> clobbers</span>
+          <span><b>{{CAREFUL_SUCCESS}}</b> success</span>
+        </div>
+        <p>{{CAREFUL_BODY}}</p>
+      </article>
+
+      <article class="pick">
+        <p class="job">When wall-clock is the constraint</p>
+        <h3><span class="arm">{{FAST_ARM}}</span> — {{FAST_TAGLINE}}</h3>
+        <div class="stats">
+          <span><b>{{FAST_SECS}}&nbsp;s</b> mean</span>
+          <span><b>{{FAST_SUCCESS}}</b> success</span>
+          <span><b>{{FAST_FP}}</b> false positives</span>
+          <span><b>{{FAST_HARM}}</b> clobbers</span>
+        </div>
+        <p>{{FAST_BODY}}</p>
+        <p class="caveat">{{FAST_CAVEAT}}</p>
+      </article>
+
+      <article class="pick">
+        <p class="job">Cheapest among real packaging (excl. Z)</p>
+        <h3><span class="arm">{{CHEAP_ARM}}</span> — {{CHEAP_TAGLINE}}</h3>
+        <div class="stats">
+          <span><b>{{CHEAP_COST}}</b> / success</span>
+          <span><b>{{CHEAP_SUCCESS}}</b> success</span>
+          <span><b>{{CHEAP_ABSTENTION}}</b> abstention</span>
+          <span><b>{{CHEAP_SECS}}&nbsp;s</b></span>
+        </div>
+        <p>{{CHEAP_BODY}}</p>
+        <p class="caveat">{{CHEAP_CAVEAT}}</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- === FINDINGS ========================================================
+       Exactly four articles. Each must cite brief numbers with <span class="fig">.
+       Typical themes (adapt to the run; drop a theme if unsupported):
+         1. authored skill → abstention / FP
+         2. discovery truncation tax
+         3. harm fingerprint (clobber_fields)
+         4. sandbox / efficiency (succ_peak_tokens, succ_calls)
+  -->
+  <section>
+    <h2>Four findings that matter</h2>
+    <p>Everything else in the full report is detail. These four explain the ranking.</p>
+    <div class="insight">
+      <article>
+        <h3>1. {{FINDING_1_TITLE}}</h3>
+        <p>{{FINDING_1_BODY}}</p>
+      </article>
+      <article>
+        <h3>2. {{FINDING_2_TITLE}}</h3>
+        <p>{{FINDING_2_BODY}}</p>
+      </article>
+      <article>
+        <h3>3. {{FINDING_3_TITLE}}</h3>
+        <p>{{FINDING_3_BODY}}</p>
+      </article>
+      <article>
+        <h3>4. {{FINDING_4_TITLE}}</h3>
+        <p>{{FINDING_4_BODY}}</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- === SUCCESS LADDER ==================================================
+       Render brief.ladder top→bottom. Controls: class "ctl", † after name,
+       fill.muted. Winner: class "win". width = success*100 (integer %).
+       Optional: collapse near-ties into one row only if both ≤1pp and same family.
+  -->
+  <section>
+    <h2>Success ladder</h2>
+    <p>
+      Share of scored runs that passed or correctly refused.
+      Controls are muted: Z0 has no tools; Z1 is handed the answers when present.
+    </p>
+    <ul class="ladder">
+      <!--
+      <li class="win|ctl|">
+        <div><div class="name">ARM</div><div class="desc">short</div></div>
+        <div class="track"><div class="fill" style="width:NN%"></div></div>
+        <div class="pct">NN%</div>
+      </li>
+      -->
+      {{LADDER_ITEMS}}
+    </ul>
+    <div class="callout warn">
+      <strong>Read lift, not absolute success.</strong>
+      {{LADDER_CALLOUT}}
+    </div>
+  </section>
+
+  <!-- === SKILL DELTAS ====================================================
+       Only if brief.skill_deltas.pairs is non-empty. Numbers from
+       success_pp_range / abstention_pp_range / authored_zero_fp.
+  -->
+  <section>
+    <h2>What the authored skill changes</h2>
+    <p>Same packaging family, skill swapped from generated (or none) to authored.</p>
+    <div class="deltas">
+      <div class="delta">
+        <div class="label">Success</div>
+        <div class="num">{{DELTA_SUCCESS}}</div>
+        <p>{{DELTA_SUCCESS_NOTE}}</p>
+      </div>
+      <div class="delta">
+        <div class="label">Abstention</div>
+        <div class="num">{{DELTA_ABSTENTION}}</div>
+        <p>{{DELTA_ABSTENTION_NOTE}}</p>
+      </div>
+      <div class="delta">
+        <div class="label">False positives</div>
+        <div class="num">{{DELTA_FP}}</div>
+        <p>{{DELTA_FP_NOTE}}</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- === WINNER FAILURES =================================================
+       brief.winner_failures — usually the careful/winner arm.
+       Top clusters only (≤5). Danger callout if a near-miss arm has harm>0
+       while winner has harm=0.
+  -->
+  <section>
+    <h2>Where {{FAIL_ARM}} still fails</h2>
+    <p>{{FAIL_INTRO}}</p>
+    <ul class="fail-list">
+      {{FAIL_ITEMS}}
+    </ul>
+    <div class="callout danger">
+      <strong>{{FAIL_CALLOUT_TITLE}}</strong>
+      {{FAIL_CALLOUT_BODY}}
+    </div>
+  </section>
+
+  <!-- === TAKEAWAYS =======================================================
+       Exactly four <li>. Lead each with <strong>actionable claim</strong>.
+       Must cover: careful pick, speed/cost caveats, skill/refusal lesson,
+       one mechanism fix (e.g. hide replace_*, avoid discovery-only).
+  -->
+  <section>
+    <h2>What to take away</h2>
+    <div class="takeaways">
+      <ol>
+        <li><strong>{{T1_STRONG}}</strong> {{T1_REST}}</li>
+        <li><strong>{{T2_STRONG}}</strong> {{T2_REST}}</li>
+        <li><strong>{{T3_STRONG}}</strong> {{T3_REST}}</li>
+        <li><strong>{{T4_STRONG}}</strong> {{T4_REST}}</li>
+      </ol>
+    </div>
+  </section>
+
+  <footer>
+    Source: <a href="./report.html">full {{RUN_ID}} report</a> ·
+    manifest <code>{{RUN_ID}}</code> · model {{MODEL}} ·
+    MDE ≈ {{MDE}}&nbsp;pp{{INCOMPLETE_NOTE}}.
+    This brief is a narrative reading of those results, not a substitute for the intervals.
+  </footer>
+
+</div>
+</body>
+</html>

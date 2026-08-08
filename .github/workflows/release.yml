@@ -1,0 +1,96 @@
+name: release
+
+# Tag push builds the artifacts and attaches them to the release.
+#
+# The .pyz is built per platform on purpose: it carries compiled wheels
+# (pydantic_core), so one built on macOS does not run on Linux. The wheel is
+# pure Python and is built once.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[dev,openai]'
+      # No network and no API key: the suite is expected to run this way, and
+      # a release that needs a credential to be verified cannot be verified by
+      # anyone but us.
+      - run: python -m pytest -q
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x86_64
+          - os: macos-latest
+            label: macos-arm64
+          - os: macos-13
+            label: macos-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install shiv
+      - run: ./build.sh
+
+      - name: Smoke-test the artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          pyz=$(ls dist/*.pyz)
+          # Run it from a directory with no checkout in it, which is the only
+          # way this proves anything about what a customer receives.
+          tmp=$(mktemp -d)
+          cp "$pyz" "$tmp/harness.pyz"
+          cd "$tmp"
+          python harness.pyz --version
+          python harness.pyz lint --demo
+          python harness.pyz init --agent both --dir .
+          test -f .claude/skills/harness-field-pack/SKILL.md
+
+      - name: Name the artifacts for their platform
+        shell: bash
+        run: |
+          cd dist
+          for f in *.pyz; do mv "$f" "${f%.pyz}-${{ matrix.label }}.pyz"; done
+          for f in *.zip; do mv "$f" "${f%.zip}-${{ matrix.label }}.zip"; done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.label }}
+          path: |
+            dist/*.pyz
+            dist/*.zip
+            dist/*.whl
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      # Wheels are identical across the matrix; keep one.
+      - run: ls -la dist && rm -f dist/*.whl.1 || true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

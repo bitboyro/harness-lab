@@ -1,0 +1,61 @@
+# A declared matrix, costed and approved before anything spends.
+#
+#   harness plan examples/plan.yaml            # what it would cost
+#   harness plan examples/plan.yaml --approve  # record the approval
+#   harness plan examples/plan.yaml --strict   # refuse without a pre-registered split
+#
+# The point of writing this down is the `confirmatory` block. Those contrasts
+# are fixed before the results exist, so none can be added after seeing them —
+# which is the difference between a finding and a story about noise.
+
+run_plan:
+  id: example-matrix
+
+  # Required, and checked: a matrix with no stated reason is how a run becomes
+  # unanalysable months later. Say what question it answers.
+  rationale: >
+    Does a discovery layer pay for itself on a surface this size? Compares
+    eager-all MCP against search/describe/invoke, with docs+curl as the
+    non-MCP reference and Z0 as the contamination floor.
+
+  # The axis assignment every arm starts from. A preset overrides what it
+  # names; anything a preset leaves unset must be set here or the run is a
+  # ConfigError, never a silent default.
+  base:
+    schema_detail: standard
+    response_shape: as-is
+    error_detail: field-scoped
+    doc_budget: standard
+    surface_size: 0
+    model: gpt-5.6-luna
+    reasoning_effort: low
+    temperature: 0.0
+    caching: "off"
+    repeats: 3
+    mcp_revision: "2026-07-28"
+
+  include:
+    presets: [Z0, A1, A2, C1, D1]
+
+  # Drives the cost projection. Match it to the pack you intend to run.
+  task_count: 40
+
+  # Pre-registered. Each is a claim you are willing to be wrong about.
+  confirmatory:
+    - contrast: [A1, A2]
+      hypothesis: >
+        Meta-tool discovery cuts static context without costing selection
+        accuracy, so A2 wins on cost per success at equal success.
+
+  # Note what you cannot declare here. `[A1, C1]` is refused: C1 has no MCP at
+  # all, so the pair crosses the mcp_revision boundary and results are never
+  # pooled across it. Run both, then report the difference separately — the
+  # planner stops you writing the claim down rather than letting you discover
+  # it after the matrix has been paid for.
+
+  # Anything you look at but did not commit to in advance. Reported separately
+  # and never promoted into the confirmatory set after the fact.
+  exploratory:
+    - contrast: [D1, A1]
+      hypothesis: >
+        Does a code sandbox trade round trips for tokens?
