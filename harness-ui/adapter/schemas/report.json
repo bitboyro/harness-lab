@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "harness-ui/adapter/report",
+  "title": "AdapterReport",
+  "type": "object",
+  "required": ["harness_version", "run", "verdict", "arms", "validation"],
+  "additionalProperties": false,
+  "properties": {
+    "harness_version": { "type": "string" },
+    "run": {
+      "type": "object",
+      "required": ["id", "model", "report_class", "n_rows", "pooling_refused"],
+      "properties": {
+        "id": { "type": "string" },
+        "model": { "type": "string" },
+        "provider": { "type": ["string", "null"] },
+        "reasoning_effort": { "type": ["string", "null"] },
+        "difficulty": { "type": ["string", "null"] },
+        "report_class": { "type": "string" },
+        "tasks": { "type": ["integer", "null"] },
+        "repeats": { "type": ["integer", "null"] },
+        "cores": { "type": ["integer", "null"] },
+        "planned": { "type": ["integer", "null"] },
+        "n_rows": { "type": "integer" },
+        "presets": { "type": "array", "items": { "type": "string" } },
+        "mde_pp": { "type": ["number", "null"] },
+        "baseline_success": { "type": ["number", "null"] },
+        "pooling_refused": { "type": "boolean" },
+        "incomplete_arms": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["have", "expected"],
+            "properties": {
+              "have": { "type": "integer" },
+              "expected": { "type": "integer" }
+            }
+          }
+        },
+        "z0_gate": {
+          "type": ["object", "null"],
+          "properties": {
+            "passed": { "type": "boolean" },
+            "substantive_answers": { "type": "integer" },
+            "graded": { "type": "integer" }
+          }
+        },
+        "task_classes": { "type": "array", "items": { "type": "string" } },
+        "truncated_count": { "type": "integer" },
+        "error_count": { "type": "integer" }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "required": ["winner", "scores", "caveats", "reason"],
+      "properties": {
+        "winner": { "type": ["string", "null"] },
+        "leader": { "type": ["string", "null"] },
+        "runner_up": { "type": ["string", "null"] },
+        "reason": { "type": "string" },
+        "scores": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        },
+        "caveats": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "arms": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/arm" }
+    },
+    "validation": {
+      "type": "string",
+      "enum": ["validated-controlled", "unvalidated", "heuristic"]
+    }
+  },
+  "$defs": {
+    "arm": {
+      "type": "object",
+      "required": ["arm", "n", "is_control"],
+      "properties": {
+        "arm": { "type": "string" },
+        "name": { "type": "string" },
+        "label": { "type": "string" },
+        "description": { "type": "string" },
+        "is_control": { "type": "boolean" },
+        "n": { "type": "integer" },
+        "graded": { "type": "integer" },
+        "success_rate": { "type": ["number", "null"] },
+        "abstention_accuracy": { "type": ["number", "null"] },
+        "harm_events": { "type": "integer" },
+        "harm_rate": { "type": "number" },
+        "truncation_rate": { "type": ["number", "null"] },
+        "lift": { "type": ["number", "null"] },
+        "below_mde": { "type": "boolean" },
+        "composite_score": { "type": ["number", "null"] },
+        "mean_wall_clock_seconds": { "type": ["number", "null"] },
+        "cost_per_success_usd": { "type": ["number", "null"] },
+        "confusion": {
+          "type": "object",
+          "properties": {
+            "tp": { "type": "integer" },
+            "fp": { "type": "integer" },
+            "tn": { "type": "integer" },
+            "fn_abstained": { "type": "integer" },
+            "fn_confident": { "type": "integer" },
+            "precision": { "type": ["number", "null"] },
+            "specificity": { "type": ["number", "null"] }
+          }
+        },
+        "tokens": {
+          "type": "object",
+          "properties": {
+            "static": { "type": ["number", "null"] },
+            "per_call_overhead": { "type": ["number", "null"] },
+            "session_setup": { "type": ["number", "null"] }
+          }
+        },
+        "by_class": {
+          "type": "object",
+          "additionalProperties": { "type": ["number", "null"] }
+        },
+        "outcome_counts": {
+          "type": "object",
+          "additionalProperties": { "type": "integer" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "harness-ui/adapter/pack-validate",
+  "title": "AdapterPackValidate",
+  "type": "object",
+  "required": ["harness_version", "valid"],
+  "additionalProperties": false,
+  "properties": {
+    "harness_version": { "type": "string" },
+    "path": { "type": "string" },
+    "valid": { "type": "boolean" },
+    "error": { "type": ["string", "null"] },
+    "pack_id": { "type": ["string", "null"] },
+    "task_count": { "type": ["integer", "null"] },
+    "unavailable_metrics": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "production_risk": { "type": ["string", "null"] }
+  }
+}

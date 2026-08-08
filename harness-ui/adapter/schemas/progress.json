@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "harness-ui/adapter/progress",
+  "title": "AdapterProgress",
+  "type": "object",
+  "required": [
+    "harness_version",
+    "done",
+    "expected",
+    "by_arm",
+    "elapsed_seconds",
+    "outcomes"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "harness_version": { "type": "string" },
+    "done": { "type": "integer", "minimum": 0 },
+    "expected": { "type": ["integer", "null"] },
+    "fraction": { "type": ["number", "null"] },
+    "eta_seconds": { "type": ["number", "null"] },
+    "elapsed_seconds": { "type": "number" },
+    "started_at": { "type": ["string", "null"], "format": "date-time" },
+    "by_arm": {
+      "type": "object",
+      "additionalProperties": { "type": "integer" }
+    },
+    "outcomes": {
+      "type": "object",
+      "additionalProperties": { "type": "integer" }
+    }
+  }
+}
