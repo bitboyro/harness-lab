@@ -41,10 +41,9 @@ _CSS = """
   p  { margin: 0 0 10px; color: var(--text-secondary); }
   .sub { color: var(--text-muted); font-size: 12px; }
   .note { font-size: 12px; color: var(--text-muted); margin: 6px 0 0; }
-  pre.ops { font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
-            background: var(--surface-2, var(--surface-1));
-            color: var(--text-primary); padding: 14px 16px; border-radius: 6px;
-            overflow-x: auto; white-space: pre-wrap; }
+  .ops-notes { margin: 10px 0 0; padding-left: 18px; color: var(--text-muted);
+               font-size: 12px; }
+  .ops-notes li { margin: 3px 0; }
   /* Each severity gets its own tinted surface, mixed from the status colour
      into the page surface, so the tint stays legible in both themes instead of
      a fixed pastel that goes muddy in dark mode. Text stays on text tokens
@@ -639,21 +638,317 @@ def _verdict_section(report: Report, order) -> str:
 def _op_ledger_section(ledger) -> str:
     """Customer payoff: which ops agents lean on and misuse.
 
-    Renders the same text blocks as the CLI report — one analysis object, two
-    surfaces — so HTML and text cannot disagree about rates or unavailable
-    signals.
+    Charts + tables (same data as ``ledger.render()`` for the CLI). Rates come
+    from the ledger object — renderers never recompute.
     """
-    body = ledger.render()
-    # Drop the leading indent the text report uses for nesting under the page.
-    lines = [ln[2:] if ln.startswith("  ") else ln for ln in body.splitlines()]
-    escaped = _e("\n".join(lines))
-    return (
-        "<h2>Operation ledger</h2>"
-        "<p>Where agents spend and stumble on the target API. Rates, not raw "
-        "counts. Discovery meta-tools are footnoted, not mixed into the "
-        "product chart.</p>"
-        f'<pre class="ops">{escaped}</pre>'
+    out: list[str] = [
+        "<h2>Operation ledger</h2>",
+        "<p>Which parts of <em>your</em> API agents lean on and misuse — so you "
+        "know what to document, hide, or redesign. Rates, not raw counts. Not "
+        "for declaring a packaging winner (that is the scorecard above).</p>",
+    ]
+    if ledger.excluded_arms:
+        out.append(
+            f'<p class="note">Controls with no target calls (omitted): '
+            f"{_e(', '.join(sorted(ledger.excluded_arms)))}.</p>"
+        )
+    if ledger.unavailable_globally:
+        out.append(
+            '<div class="banner">No gold path on this run — over-touch, '
+            "off-path, and distractors are <b>unavailable</b> (not shown as "
+            "zero). Call-error and forbidden rates still apply.</div>"
+        )
+    elif ledger.expected_share:
+        path = ", ".join(
+            op for op, _ in sorted(
+                ledger.expected_share.items(), key=lambda kv: (-kv[1], kv[0]),
+            )[:8]
+        )
+        out.append(
+            f'<p class="note">Gold path (navigation + terminal writes): '
+            f"<code>{_e(path)}</code>. Off-path = called on an answerable "
+            f"task but not on that path.</p>"
+        )
+
+    # ---- A. over-touch / usage -------------------------------------------
+    excess = ledger.excess_usage()
+    if excess is not None:
+        rows = [s for s in excess if (s.excess_usage or 0) >= 0.02][:8]
+        out.append("<h3>A. Over-touch</h3>")
+        out.append(
+            "<p>Called more than the gold path expects — candidates to "
+            "document or hide. Bar length is excess share of all target "
+            "calls.</p>"
+        )
+        if rows:
+            bars = [
+                Bar(label=s.op_id, value=(s.excess_usage or 0) * 100, slot=2)
+                for s in rows
+            ]
+            out.append(bar_chart(
+                bars, title="Over-touch (excess usage, percentage points)",
+                unit="pp", domain=(0.0, max(b.value or 0 for b in bars) * 1.15),
+            ))
+            out.append(_ops_score_table(
+                rows,
+                columns=(
+                    ("op", "Operation"),
+                    ("usage", "Usage"),
+                    ("expected", "Gold ~"),
+                    ("excess", "Excess"),
+                    ("family", "Family"),
+                ),
+            ))
+        else:
+            out.append('<p class="note">None above 2% excess.</p>')
+    else:
+        usage = ledger.usage(top=8)
+        out.append("<h3>A. Where agents spend</h3>")
+        out.append(
+            "<p>Usage share of target calls. Excess unavailable without a "
+            "gold path.</p>"
+        )
+        if usage:
+            bars = [Bar(label=s.op_id, value=s.usage_share * 100, slot=1)
+                    for s in usage]
+            out.append(bar_chart(
+                bars, title="Usage share of target calls", unit="%",
+                domain=(0.0, max(b.value or 0 for b in bars) * 1.15),
+            ))
+            out.append(_ops_score_table(
+                usage,
+                columns=(
+                    ("op", "Operation"),
+                    ("usage", "Usage"),
+                    ("family", "Family"),
+                ),
+            ))
+
+    # ---- B. stumble ------------------------------------------------------
+    out.append("<h3>B. Stumble by kind</h3>")
+    out.append(
+        "<p>Separate failure modes — not one blended misuse score. Ranked by "
+        "rate × volume so a rare 100% miss does not outrank a common problem.</p>"
     )
+    out.append('<div class="grid2">')
+    for kind, title, tip, slot in (
+        ("wrong_route", "Off-path",
+         "Share of this op’s calls not on the gold path", 3),
+        ("call_error", "Call errors", "4xx / 5xx / sandbox failures", 5),
+        ("forbidden", "Forbidden", "Blocked or out-of-scope attempts", 8),
+    ):
+        ranked = ledger.stumble_by_kind(kind)  # type: ignore[arg-type]
+        out.append('<div class="card">')
+        out.append(f"<h4>{_e(title)}</h4>")
+        out.append(f'<p class="note">{_e(tip)}</p>')
+        if ranked is None:
+            out.append('<p class="note">Unavailable (needs gold).</p>')
+            out.append("</div>")
+            continue
+        rate_of = {
+            "wrong_route": lambda s: s.off_gold_rate or 0.0,
+            "call_error": lambda s: s.error_rate,
+            "forbidden": lambda s: s.forbidden_rate,
+        }[kind]
+        ranked = [s for s in ranked
+                  if rate_of(s) >= 0.01 and s.usage_share >= 0.01][:5]
+        if not ranked:
+            out.append('<p class="note">(none)</p>')
+        else:
+            # Chart encodes volume contribution (rate × usage), not raw rate.
+            bars = [
+                Bar(label=s.op_id,
+                    value=rate_of(s) * s.usage_share * 100, slot=slot)
+                for s in ranked
+            ]
+            out.append(bar_chart(
+                bars, title=f"{title} volume (rate × usage)", unit="pp",
+                width=320,
+                domain=(0.0, max((b.value or 0) for b in bars) * 1.2 or 1.0),
+            ))
+            head = ("<tr><th class='prose'>Operation</th><th>Of its calls</th>"
+                    "<th>Of all calls</th></tr>")
+            body = "".join(
+                f"<tr><td class='prose'><code>{_e(s.op_id)}</code></td>"
+                f"<td>{_pct(rate_of(s))}</td>"
+                f"<td>{_pct(s.usage_share)}</td></tr>"
+                for s in ranked
+            )
+            out.append(f'<div class="scroll"><table>{head}{body}</table></div>')
+        out.append("</div>")
+    out.append("</div>")
+
+    distractors = ledger.distractors()
+    if distractors:
+        meat = [s for s in distractors if s.usage_share >= 0.02][:6]
+        if meat:
+            out.append("<h3>Distractors</h3>")
+            out.append(
+                "<p>High off-path and almost never on gold — strong hide / "
+                "docs candidates.</p>"
+            )
+            out.append(_ops_score_table(
+                meat,
+                columns=(
+                    ("op", "Operation"),
+                    ("usage", "Usage"),
+                    ("off_gold", "Off-path"),
+                    ("family", "Family"),
+                ),
+            ))
+
+    # ---- C. families + deltas --------------------------------------------
+    fams = [f for f in ledger.families() if f.usage_share >= 0.01][:10]
+    if fams:
+        out.append("<h3>C. Resource families</h3>")
+        bars = [Bar(label=f.family, value=f.usage_share * 100, slot=1)
+                for f in fams]
+        out.append(bar_chart(
+            bars, title="Usage share by resource family", unit="%",
+            domain=(0.0, max(b.value or 0 for b in bars) * 1.15),
+        ))
+        head = (
+            "<tr><th class='prose sortable' data-type='str'>Family</th>"
+            "<th class='sortable' data-type='num'>Usage</th>"
+            "<th class='sortable' data-type='num'>Errors</th>"
+            "<th class='sortable' data-type='num'>Off-path</th>"
+            "<th class='prose'>Busiest problem</th></tr>"
+        )
+        body = "".join(
+            "<tr>"
+            f"<td class='prose'>{_e(f.family)}</td>"
+            f"<td>{_pct(f.usage_share)}</td>"
+            f"<td>{_pct(f.error_rate)}</td>"
+            f"<td>{'—' if f.off_gold_rate is None else _pct(f.off_gold_rate)}</td>"
+            f"<td class='prose'><code>{_e(f.worst_op)}</code></td>"
+            "</tr>"
+            for f in fams
+        )
+        out.append(f'<div class="scroll"><table>{head}{body}</table></div>')
+
+    cards = ledger.arm_cards()
+    if cards:
+        out.append("<h3>D. Per-arm cards</h3>")
+        out.append(
+            "<p>What each packaging leaned on and where it stumbled — "
+            "headlines for skill/docs edits, not winners.</p>"
+        )
+        out.append('<div class="grid2">')
+        for card in cards:
+            out.append('<div class="card">')
+            out.append(f"<h4>{_e(card.arm)}</h4>")
+            lean = (f"<code>{_e(card.lean_on)}</code> ({_pct(card.lean_share)})"
+                    if card.lean_on else "—")
+            spend = (
+                f"<code>{_e(card.top_spend)}</code> ({_pct(card.top_spend_share)})"
+                if card.top_spend else "—"
+            )
+            if card.stumble_op and card.stumble_volume > 0:
+                stumble = (
+                    f"<code>{_e(card.stumble_op)}</code> "
+                    f"({_e(card.stumble_kind)} {_pct(card.stumble_rate)} "
+                    f"of its calls)"
+                )
+            else:
+                stumble = "(none notable)"
+            out.append(f'<div class="kv"><span>Lean-on</span><b>{lean}</b></div>')
+            out.append(
+                f'<div class="kv"><span>Top spend</span><b>{spend}</b></div>'
+            )
+            out.append(
+                f'<div class="kv"><span>Stumble</span><b>{stumble}</b></div>'
+            )
+            out.append(
+                f'<div class="kv"><span>Target calls</span>'
+                f"<b>{card.n_calls}</b></div>"
+            )
+            out.append("</div>")
+        out.append("</div>")
+
+    contrasts = ledger.skill_contrasts()
+    metric_label = "off-path" if ledger.has_gold else "errors"
+    if contrasts:
+        out.append(f"<h3>E. Skill / discovery contrasts ({_e(metric_label)})</h3>")
+        out.append(
+            "<p>Fixed pairs only (skill on/off, eager vs meta-tools). "
+            "Negative Δ means the right-hand arm improved. Descriptive — not "
+            "confirmatory, no MDE.</p>"
+        )
+        for sc in contrasts:
+            out.append(
+                f"<h4>{_e(sc.arm_a)} → {_e(sc.arm_b)} "
+                f"<span class='armname'>{_e(sc.label)}</span></h4>"
+            )
+            if not sc.deltas:
+                out.append('<p class="note">No swing ≥ 5 pp on shared ops.</p>')
+                continue
+            head = (
+                "<tr><th class='prose'>Operation</th>"
+                "<th class='prose'>Change</th><th>Δ</th></tr>"
+            )
+            body_rows = []
+            for d in sc.deltas:
+                direction = "lower" if d.delta < 0 else "higher"
+                body_rows.append(
+                    f"<tr><td class='prose'><code>{_e(d.op_id)}</code></td>"
+                    f"<td class='prose'>{_e(sc.arm_b)} {direction}</td>"
+                    f"<td>{d.delta:+.0%}</td></tr>"
+                )
+            out.append(
+                f'<div class="scroll"><table>{head}{"".join(body_rows)}'
+                f"</table></div>"
+            )
+
+    notes: list[str] = []
+    if ledger.discovery_calls:
+        notes.append(
+            f"{ledger.discovery_calls} discovery meta-tool calls "
+            f"(search/describe/invoke) omitted from the charts above"
+        )
+    parsed = sum(1 for c in ledger.calls if c.resolution == "parsed")
+    if parsed:
+        notes.append(
+            f"{parsed} shell/code calls resolved by parsing transcripts — "
+            f"approximate, not a server request log"
+        )
+    notes.append(
+        "Volume is not blame; HTTP 200 can still harm; unanswerable thrash "
+        "is abstention, not an outage"
+    )
+    out.append("<ul class='ops-notes'>"
+               + "".join(f"<li>{_e(n)}</li>" for n in notes)
+               + "</ul>")
+    return "\n".join(out)
+
+
+def _ops_score_table(scores, *, columns: tuple[tuple[str, str], ...]) -> str:
+    """Compact sortable table over OpScore rows for the ledger section."""
+    head = "<tr>" + "".join(
+        f"<th class='{'prose ' if key in ('op', 'family') else ''}"
+        f"sortable' data-type="
+        f"'{'str' if key in ('op', 'family') else 'num'}'>{_e(label)}</th>"
+        for key, label in columns
+    ) + "</tr>"
+    body = []
+    for s in scores:
+        cells = []
+        for key, _ in columns:
+            if key == "op":
+                cells.append(f"<td class='prose'><code>{_e(s.op_id)}</code></td>")
+            elif key == "family":
+                cells.append(f"<td class='prose'>{_e(s.family)}</td>")
+            elif key == "usage":
+                cells.append(f"<td>{_pct(s.usage_share)}</td>")
+            elif key == "expected":
+                cells.append(f"<td>{_pct(s.expected_share or 0.0)}</td>")
+            elif key == "excess":
+                cells.append(f"<td>{(s.excess_usage or 0):+.0%}</td>")
+            elif key == "off_gold":
+                cells.append(f"<td>{_pct(s.off_gold_rate)}</td>")
+            else:
+                cells.append("<td>—</td>")
+        body.append("<tr>" + "".join(cells) + "</tr>")
+    return f'<div class="scroll"><table>{head}{"".join(body)}</table></div>'
 
 
 def _behaviour_section(report: Report, order, charts: dict[str, str]) -> str:

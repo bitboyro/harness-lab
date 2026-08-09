@@ -107,29 +107,36 @@ a number from a spreadsheet.
 
 ## Operation ledger
 
+⚠ AMENDED — section rewrite: clearer copy; controlled gold augmented with
+terminal writes; stumble ranked by rate × volume; families pluralized;
+per-arm cards and skill/discovery contrast pairs; HTML charts/tables.
+
 After the mechanism metrics, the report names **which parts of the API** agents
 lean on and misuse — so you know what to document, hide, or redesign. Built at
-report time from traces; nothing in the agent loop changes.
+report time from traces; nothing in the agent loop changes. This is **not** how
+you pick a packaging winner (that is the scorecard above).
 
 Resolution is by packaging *axes* (transport / discovery / invocation), never by
 arm name — a custom arm that behaves like A1 is scored like A1.
 
-**Core rates** (per target operation): usage share, error rate, forbidden rate,
-off-gold rate (needs a gold path), redundant rate. Discovery meta-tools
-(`search` / `describe`) are footnoted, not mixed into the product chart.
+On the controlled rig, stored `gold_call_sequence` is the **navigation** path;
+writes are graded on final state. The ledger **adds** the terminal ops each
+task class needs (`patch_episode`, `archive_episode`, …) so “off-path” means
+wandered away from the solution, not “called the write the grade requires.”
 
-**Three blocks:**
+**Blocks:**
 
 | Block | What it shows |
 |---|---|
-| **A. Over-touch** | Usage minus gold-expected share — what agents hit beyond the task. Without gold, falls back to raw usage and says so. |
-| **B. Stumble by kind** | Wrong-route, call-error, and forbidden ranked separately. A blended “misuse” score is secondary only. |
-| **C. Family + arm deltas** | Resource families (episodes, assets, …) and descriptive packaging contrasts on shared ops. Not confirmatory; no MDE claim. |
+| **A. Over-touch** | Called more than the gold path expects — document or hide candidates. Without gold, raw usage only. |
+| **B. Stumble by kind** | Off-path, call-error, and forbidden ranked separately by rate × volume. |
+| **C. Families** | Resource families (episodes, assets, …). |
+| **D. Per-arm cards** | For each packaging: lean-on endpoint, top spend, top stumble. |
+| **E. Skill contrasts** | Fixed pairs (e.g. A1→B1-auth, D1→D2-auth): did the skill change which ops are misused? Descriptive only. |
 
-Signals the run cannot measure (no `gold_call_sequence`, shell/code bodies only
-parsed from text) are labelled **unavailable** or `[parsed]` — never shown as a
-quiet zero. Volume is not blame; HTTP-clean calls can still harm; unanswerable
-thrash is an abstention story, not an endpoint outage.
+No gold ⇒ off-path / over-touch stay **unavailable**, not zero. Shell/code arms
+note approximate transcript parsing in the footnotes. Volume is not blame;
+HTTP-clean can still harm; unanswerable thrash is abstention, not an outage.
 
 ## Reading a single run
 

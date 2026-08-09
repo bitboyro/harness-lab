@@ -102,6 +102,44 @@ class ArmDelta:
     delta: float  # arm_b - arm_a (negative ⇒ arm_b improved)
 
 
+@dataclass(frozen=True, slots=True)
+class ArmCard:
+    """One arm's spend / stumble headline — descriptive, not a winner claim."""
+
+    arm: str
+    lean_on: str | None
+    lean_share: float
+    top_spend: str | None
+    top_spend_share: float
+    stumble_op: str | None
+    stumble_kind: str
+    stumble_rate: float
+    stumble_volume: float
+    n_calls: int
+
+
+@dataclass(frozen=True, slots=True)
+class SkillContrast:
+    """Fixed packaging pair with the largest shared-op swings."""
+
+    arm_a: str
+    arm_b: str
+    label: str
+    deltas: tuple[ArmDelta, ...]
+
+
+#: Pairs worth showing when both arms ran. Hypothesis is prose for the report,
+#: not a confirmatory contrast registration.
+SKILL_CONTRAST_PAIRS: tuple[tuple[str, str, str], ...] = (
+    ("A1", "B1-auth", "authored skill on eager MCP"),
+    ("A2", "B2-auth", "authored skill on meta-tools"),
+    ("D1", "D2-auth", "authored skill on code sandbox"),
+    ("A1", "B1", "generated skill on eager MCP"),
+    ("A1", "A2", "eager-all vs meta-tools discovery"),
+    ("D1", "D2", "generated skill on code sandbox"),
+)
+
+
 @dataclass
 class OpLedger:
     """Core call rows plus derived views for the customer report section."""
@@ -158,16 +196,24 @@ class OpLedger:
         arm: str | None = None,
         top: int = 10,
     ) -> list[OpScore] | None:
-        """Rank by one misuse kind. wrong_route needs gold."""
+        """Rank by one misuse kind × volume. wrong_route needs gold.
+
+        Ranking by rate alone makes every never-in-gold op look equally bad at
+        100%. Weighting by usage share surfaces the ops that actually moved
+        the needle on the run.
+        """
         if kind == "wrong_route" and not self.has_gold:
             return None
-        key = {
+        rate_of = {
             "wrong_route": lambda s: s.off_gold_rate or 0.0,
             "call_error": lambda s: s.error_rate,
             "forbidden": lambda s: s.forbidden_rate,
         }[kind]
         scored = [s for s in self._scores(arm=arm) if s.calls > 0]
-        return sorted(scored, key=lambda s: (-key(s), -s.usage_share, s.op_id))[:top]
+        return sorted(
+            scored,
+            key=lambda s: (-rate_of(s) * s.usage_share, -rate_of(s), s.op_id),
+        )[:top]
 
     def misuse(self, *, arm: str | None = None, top: int = 10) -> list[OpScore]:
         """Secondary composite stumble rank — only ops with a full rate set."""
@@ -189,9 +235,12 @@ class OpLedger:
         for family, scores in by_family.items():
             calls = sum(s.calls for s in scores)
             err = sum(s.error_rate * s.calls for s in scores) / calls if calls else 0.0
-            if self.has_gold and all(s.off_gold_rate is not None for s in scores):
+            gold_scores = [s for s in scores if s.off_gold_rate is not None]
+            if gold_scores:
+                g_calls = sum(s.calls for s in gold_scores) or 1
                 off: float | None = (
-                    sum((s.off_gold_rate or 0) * s.calls for s in scores) / calls
+                    sum((s.off_gold_rate or 0) * s.calls for s in gold_scores)
+                    / g_calls
                 )
             else:
                 off = None
@@ -239,9 +288,100 @@ class OpLedger:
                     op_id=op_id, family=sa.family, arm_a=a, arm_b=b,
                     metric=metric, delta=float(vb) - float(va),
                 ))
-        # Prefer improvements (negative delta) then magnitude.
-        deltas.sort(key=lambda d: (d.delta, -abs(d.delta), d.op_id))
+        # Largest absolute packaging swings first (descriptive only).
+        deltas.sort(key=lambda d: (-abs(d.delta), d.op_id, d.arm_a, d.arm_b))
         return deltas[:top]
+
+    def arm_cards(self) -> list[ArmCard]:
+        """Per-arm lean-on / spend / stumble headlines for the report."""
+        arms = sorted({
+            c.arm for c in self.calls if not c.discovery and c.op_id
+        })
+        cards: list[ArmCard] = []
+        for arm in arms:
+            scores = self._scores(arm=arm)
+            n_calls = sum(s.calls for s in scores)
+            if not scores:
+                continue
+            lean = max(scores, key=lambda s: (s.usage_share, s.calls))
+            spend_list = self.excess_usage(arm=arm, top=1)
+            if spend_list and (spend_list[0].excess_usage or 0) > 0:
+                spend_op, spend_share = spend_list[0].op_id, spend_list[0].usage_share
+            else:
+                spend_op, spend_share = lean.op_id, lean.usage_share
+
+            best_op: str | None = None
+            best_kind = "—"
+            best_rate = 0.0
+            best_vol = 0.0
+            for kind, label, rate_of in (
+                ("wrong_route", "off-path",
+                 lambda s: s.off_gold_rate if s.off_gold_rate is not None else -1.0),
+                ("call_error", "errors", lambda s: s.error_rate),
+                ("forbidden", "forbidden", lambda s: s.forbidden_rate),
+            ):
+                del kind
+                for s in scores:
+                    rate = rate_of(s)
+                    if rate < 0:
+                        continue
+                    vol = rate * s.usage_share
+                    if vol > best_vol or (vol == best_vol and rate > best_rate):
+                        best_op, best_kind = s.op_id, label
+                        best_rate, best_vol = rate, vol
+
+            cards.append(ArmCard(
+                arm=arm,
+                lean_on=lean.op_id,
+                lean_share=lean.usage_share,
+                top_spend=spend_op,
+                top_spend_share=spend_share,
+                stumble_op=best_op,
+                stumble_kind=best_kind,
+                stumble_rate=best_rate,
+                stumble_volume=best_vol,
+                n_calls=n_calls,
+            ))
+        return cards
+
+    def skill_contrasts(
+        self,
+        *,
+        metric: Literal["off_gold_rate", "error_rate", "forbidden_rate"] | None = None,
+        top_per_pair: int = 3,
+        min_abs_delta: float = 0.05,
+    ) -> list[SkillContrast]:
+        """Fixed skill/discovery pairs present in the run — descriptive only."""
+        if metric is None:
+            metric = "off_gold_rate" if self.has_gold else "error_rate"
+        if metric == "off_gold_rate" and not self.has_gold:
+            metric = "error_rate"
+        present = {c.arm for c in self.calls if not c.discovery and c.op_id}
+        by_arm = {a: {s.op_id: s for s in self._scores(arm=a)} for a in present}
+        out: list[SkillContrast] = []
+        for a, b, label in SKILL_CONTRAST_PAIRS:
+            if a not in present or b not in present:
+                continue
+            shared = set(by_arm[a]) & set(by_arm[b])
+            deltas: list[ArmDelta] = []
+            for op_id in shared:
+                sa, sb = by_arm[a][op_id], by_arm[b][op_id]
+                va, vb = getattr(sa, metric), getattr(sb, metric)
+                if va is None or vb is None:
+                    continue
+                delta = float(vb) - float(va)
+                if abs(delta) < min_abs_delta:
+                    continue
+                deltas.append(ArmDelta(
+                    op_id=op_id, family=sa.family, arm_a=a, arm_b=b,
+                    metric=metric, delta=delta,
+                ))
+            deltas.sort(key=lambda d: (-abs(d.delta), d.op_id))
+            out.append(SkillContrast(
+                arm_a=a, arm_b=b, label=label,
+                deltas=tuple(deltas[:top_per_pair]),
+            ))
+        return out
 
     def by_class(self, task_class: str, *, arm: str | None = None) -> list[OpScore]:
         rows = [
@@ -277,147 +417,213 @@ class OpLedger:
         return out[:top]
 
     def render(self) -> str:
+        """Customer-facing text block for CLI and HTML (same string both places)."""
         lines = [
-            "  operation ledger — where agents spend and stumble",
-            "  (rates, not raw counts; volume follows task shape)",
+            "  Operation ledger — which parts of the API agents lean on",
+            "",
+            "  Per target operation (not packaging arms). Rates, not raw counts.",
+            "  Use this to decide what to document, hide, or redesign — not to",
+            "  pick a winner (that is the scorecard above).",
             "",
         ]
         if self.excluded_arms:
-            lines.append("  excluded (no target calls — not shown as zero):")
-            for arm, reason in sorted(self.excluded_arms.items()):
-                lines.append(f"    {arm:<12} {reason}")
+            excluded = ", ".join(sorted(self.excluded_arms))
+            lines.append(
+                f"  Controls with no target calls (omitted, not zeroed): {excluded}"
+            )
             lines.append("")
 
         if self.unavailable_globally:
             lines.append(
-                "  unavailable on this run: "
-                + ", ".join(sorted(self.unavailable_globally))
-                + " (no gold_call_sequence — not shown as zero)"
+                "  No gold_call_sequence on this run — off-path / over-touch /"
+            )
+            lines.append(
+                "  distractors are unavailable (not shown as zero)."
+            )
+            lines.append("")
+        elif self.expected_share:
+            path = ", ".join(
+                op for op, _ in sorted(
+                    self.expected_share.items(), key=lambda kv: (-kv[1], kv[0]),
+                )[:8]
+            )
+            lines.append(f"  Gold path (navigation + terminal writes): {path}")
+            lines.append(
+                "  Off-path = called on an answerable task but not on that path."
             )
             lines.append("")
 
-        # A. over-touch (excess) or raw usage
+        # A. over-touch or usage
         excess = self.excess_usage()
         if excess is not None:
-            lines.append("  A. over-touch (usage − gold-expected)")
+            lines.append("  A. Over-touch — called more than the gold path expects")
             lines.append(
-                "     Spend beyond the task path — prioritize docs/hide here, "
-                "not declare winners."
+                "     Candidates to document or hide. Ranked by excess share."
             )
+            shown = 0
             for s in excess:
-                if (s.excess_usage or 0) <= 0:
+                if (s.excess_usage or 0) < 0.02:
                     continue
-                tag = _fidelity_tag(s.resolution)
+                exp = s.expected_share or 0.0
                 lines.append(
-                    f"    {s.op_id:<28} excess={s.excess_usage:+.0%}  "
-                    f"use={s.usage_share:5.0%} exp={s.expected_share or 0:5.0%}"
-                    f"{tag}"
+                    f"    {s.op_id:<28} {s.usage_share:4.0%} of calls"
+                    f"  (gold ~{exp:3.0%}, excess {s.excess_usage:+.0%})"
                 )
+                shown += 1
+                if shown >= 8:
+                    break
+            if not shown:
+                lines.append("    (none above 2% excess)")
             lines.append("")
         else:
-            usage = self.usage()
+            usage = self.usage(top=8)
             if usage:
-                lines.append("  A. where agents spend (usage share)")
-                lines.append(
-                    "     Excess usage unavailable without gold — raw share "
-                    "follows the task shape."
-                )
+                lines.append("  A. Where agents spend — usage share (no gold)")
                 for s in usage:
-                    tag = _fidelity_tag(s.resolution)
                     lines.append(
-                        f"    {s.op_id:<28} {s.usage_share:5.0%}  "
-                        f"family={s.family}{tag}"
+                        f"    {s.op_id:<28} {s.usage_share:4.0%}  [{s.family}]"
                     )
                 lines.append("")
 
         # B. stumble by kind
-        lines.append("  B. where agents stumble (by kind, not one blended score)")
-        for kind, label in (
-            ("wrong_route", "wrong-route (off-gold)"),
-            ("call_error", "call-error (4xx/5xx)"),
-            ("forbidden", "forbidden"),
+        lines.append("  B. Stumble — separate kinds (not one blended misuse score)")
+        lines.append(
+            "     Ranked by rate × volume so a rare 100% miss does not outrank"
+        )
+        lines.append("     a common problem.")
+        for kind, label, tip in (
+            ("wrong_route", "Off-path",
+             "share of this op's calls that were not on the gold path"),
+            ("call_error", "Call errors", "4xx / 5xx / sandbox failures"),
+            ("forbidden", "Forbidden", "blocked or out-of-scope attempts"),
         ):
             ranked = self.stumble_by_kind(kind)  # type: ignore[arg-type]
             if ranked is None:
                 lines.append(f"    {label}: unavailable (needs gold)")
                 continue
-            # Skip empty-looking tops (all zeros).
-            key = {
+            rate_of = {
                 "wrong_route": lambda s: s.off_gold_rate or 0.0,
                 "call_error": lambda s: s.error_rate,
                 "forbidden": lambda s: s.forbidden_rate,
             }[kind]
-            ranked = [s for s in ranked if key(s) > 0][:5]
+            ranked = [
+                s for s in ranked
+                if rate_of(s) >= 0.01 and s.usage_share >= 0.01
+            ][:5]
+            lines.append(f"    {label} ({tip}):")
             if not ranked:
-                lines.append(f"    {label}: (none)")
+                lines.append("      (none)")
                 continue
-            lines.append(f"    {label}:")
             for s in ranked:
-                tag = _fidelity_tag(s.resolution)
-                if kind == "wrong_route":
-                    val = s.off_gold_rate or 0.0
-                elif kind == "call_error":
-                    val = s.error_rate
-                else:
-                    val = s.forbidden_rate
-                lines.append(f"      {s.op_id:<26} {val:5.0%}{tag}")
+                lines.append(
+                    f"      {s.op_id:<26} {rate_of(s):4.0%} of its calls"
+                    f"  · {s.usage_share:3.0%} of all target calls"
+                )
         distractors = self.distractors()
         if distractors:
-            lines.append("    distractors (high off-gold, rare in gold):")
-            for s in distractors[:5]:
+            meat = [s for s in distractors if s.usage_share >= 0.02][:5]
+            if meat:
                 lines.append(
-                    f"      {s.op_id:<26} off_gold={s.off_gold_rate:5.0%}"
+                    "    Distractors — high off-path, almost never on gold:"
                 )
+                for s in meat:
+                    lines.append(
+                        f"      {s.op_id:<26} {s.usage_share:3.0%} of calls"
+                        f"  · off-path {s.off_gold_rate:3.0%}"
+                    )
         lines.append("")
 
-        # C. family + arm deltas
-        fams = self.families()
+        # C. families
+        fams = [f for f in self.families() if f.usage_share >= 0.01][:8]
         if fams:
-            lines.append("  C. family snapshot")
-            for f in fams:
-                off = ("n/a" if f.off_gold_rate is None
-                       else f"{f.off_gold_rate:5.0%}")
-                lines.append(
-                    f"    {f.family:<20} usage={f.usage_share:5.0%}  "
-                    f"err={f.error_rate:5.0%}  off_gold={off}  "
-                    f"worst={f.worst_op}"
-                )
-            lines.append("")
-
-        metric = "off_gold_rate" if self.has_gold else "error_rate"
-        deltas = self.arm_deltas(metric=metric)  # type: ignore[arg-type]
-        if deltas:
-            lines.append(f"  arm deltas on {metric} (descriptive, not confirmatory):")
-            for d in deltas:
-                if abs(d.delta) < 0.05:
-                    continue
-                direction = "lower" if d.delta < 0 else "higher"
-                lines.append(
-                    f"    {d.op_id}: {d.arm_b} {direction} than {d.arm_a} "
-                    f"by {abs(d.delta):.0%}"
-                )
-            lines.append("")
-
-        if self.discovery_calls:
+            lines.append("  C. Resource families")
             lines.append(
-                f"  discovery footnote: {self.discovery_calls} meta-tool "
-                f"calls (search/describe/invoke) excluded from target charts"
+                f"    {'family':<16} {'usage':>6}  {'errors':>6}  "
+                f"{'off-path':>8}  busiest problem"
             )
+            for f in fams:
+                off = ("   n/a" if f.off_gold_rate is None
+                       else f"{f.off_gold_rate:7.0%}")
+                lines.append(
+                    f"    {f.family:<16} {f.usage_share:5.0%}  "
+                    f"{f.error_rate:6.0%}  {off}  {f.worst_op}"
+                )
             lines.append("")
 
+        # D. per-arm cards
+        cards = self.arm_cards()
+        if cards:
+            lines.append("  D. Per-arm cards — what each packaging leaned on")
+            lines.append(
+                "     Descriptive headlines for skill/docs edits — not winners."
+            )
+            for card in cards:
+                lean = (f"{card.lean_on} ({card.lean_share:.0%})"
+                        if card.lean_on else "—")
+                spend = (f"{card.top_spend} ({card.top_spend_share:.0%})"
+                         if card.top_spend else "—")
+                if card.stumble_op and card.stumble_volume > 0:
+                    stumble = (
+                        f"{card.stumble_op} ({card.stumble_kind} "
+                        f"{card.stumble_rate:.0%} of its calls)"
+                    )
+                else:
+                    stumble = "(none notable)"
+                lines.append(f"    {card.arm}")
+                lines.append(f"      lean-on     {lean}")
+                lines.append(f"      top spend   {spend}")
+                lines.append(f"      stumble     {stumble}")
+            lines.append("")
+
+        # E. skill / discovery contrasts
+        contrasts = self.skill_contrasts()
+        metric_label = "off-path" if self.has_gold else "errors"
+        if contrasts:
+            lines.append(
+                f"  E. Skill / discovery contrasts on {metric_label}"
+            )
+            lines.append(
+                "     Fixed pairs only. Negative Δ = arm_b improved. "
+                "Not confirmatory."
+            )
+            any_delta = False
+            for sc in contrasts:
+                lines.append(f"    {sc.arm_a} → {sc.arm_b}  ({sc.label})")
+                if not sc.deltas:
+                    lines.append("      (no swing ≥ 5 pp on shared ops)")
+                    continue
+                any_delta = True
+                for d in sc.deltas:
+                    direction = "lower" if d.delta < 0 else "higher"
+                    lines.append(
+                        f"      {d.op_id}: {sc.arm_b} {direction} by "
+                        f"{abs(d.delta):.0%}"
+                    )
+            if not any_delta:
+                lines.append(
+                    "    (pairs present, but no shared-op swing ≥ 5 pp)"
+                )
+            lines.append("")
+
+        notes: list[str] = []
+        if self.discovery_calls:
+            notes.append(
+                f"{self.discovery_calls} discovery meta-tool calls "
+                f"(search/describe/invoke) omitted from the charts above"
+            )
         parsed = sum(1 for c in self.calls if c.resolution == "parsed")
         if parsed:
-            lines.append(
-                f"  fidelity: {parsed} calls resolved by parsing shell/code "
-                f"bodies [parsed] — best-effort, not a server request log"
+            notes.append(
+                f"{parsed} shell/code calls resolved by parsing transcripts "
+                f"— approximate, not a server request log"
             )
-            lines.append("")
-
-        lines.append(
-            "  interpretation: volume ≠ blame; HTTP-clean can still harm; "
-            "unanswerable thrash is abstention, not an outage; arm differences "
-            "in which ops appear are packaging shape until rates move."
+        notes.append(
+            "Volume is not blame; HTTP 200 can still harm; unanswerable thrash "
+            "is abstention, not an outage"
         )
+        lines.append("  Notes")
+        for n in notes:
+            lines.append(f"    · {n}")
         return "\n".join(lines)
 
     def _scores(self, *, arm: str | None) -> list[OpScore]:
@@ -470,9 +676,10 @@ class OpLedger:
             else:
                 stumble = None
                 unavailable.add("stumble_rank")
-            resolution: ResolutionKind = group[0].resolution
-            if any(c.resolution == "parsed" for c in group):
-                resolution = "parsed"
+            # Majority fidelity — a few parsed D-arm calls must not brand the
+            # whole op [parsed] when A/B arms resolved it as a native tool.
+            kinds = Counter(c.resolution for c in group)
+            resolution = kinds.most_common(1)[0][0]
             scores.append(OpScore(
                 op_id=op_id,
                 family=group[0].family,
@@ -542,17 +749,49 @@ def resolve_call(
     return (str(tool) if tool else None), "tool", False
 
 
+#: Verb prefixes stripped before family rollup. Longer first so
+#: ``append_episode_tag`` → ``episode_tag`` → episodes, not ``append_episode_tag``.
+_VERB_PREFIXES = (
+    "append_", "replace_", "create_", "update_", "patch_", "delete_",
+    "archive_", "search_", "describe_", "invoke_", "list_", "get_",
+)
+
+#: First path segment → plural resource family (customer-facing rollup).
+_FAMILY_ALIASES = {
+    "episode": "episodes",
+    "episodes": "episodes",
+    "series": "series",
+    "season": "seasons",
+    "seasons": "seasons",
+    "studio": "studios",
+    "studios": "studios",
+    "asset": "assets",
+    "assets": "assets",
+    "airing": "airings",
+    "airings": "airings",
+    "catalog_entry": "catalog_entries",
+    "catalog_entrys": "catalog_entries",
+    "catalog_entries": "catalog_entries",
+    "format_variant": "format_variants",
+    "format_variants": "format_variants",
+}
+
+
 def family_of(op_id: str, *, tags: dict[str, str] | None = None) -> str:
-    """OpenAPI tag if known; else the resource stem after the verb prefix."""
+    """OpenAPI tag if known; else a plural resource family from the op id."""
     if tags and op_id in tags:
         return tags[op_id]
-    for prefix in (
-        "get_", "list_", "create_", "update_", "patch_", "replace_",
-        "delete_", "archive_", "search_", "describe_", "invoke_",
-    ):
-        if op_id.startswith(prefix):
-            return op_id[len(prefix):] or op_id
-    return op_id
+    stem = op_id
+    for prefix in _VERB_PREFIXES:
+        if stem.startswith(prefix):
+            stem = stem[len(prefix):] or stem
+            break
+    head = stem.split("_", 1)[0]
+    if head in _FAMILY_ALIASES:
+        return _FAMILY_ALIASES[head]
+    if stem in _FAMILY_ALIASES:
+        return _FAMILY_ALIASES[stem]
+    return stem
 
 
 def gold_ops_from_sequence(sequence: Iterable[Any]) -> tuple[str, ...]:
@@ -566,6 +805,43 @@ def gold_ops_from_sequence(sequence: Iterable[Any]) -> tuple[str, ...]:
         if tool:
             out.append(str(tool))
     return tuple(out)
+
+
+#: Controlled-rig ``gold_call_sequence`` is the *navigation* path only; the
+#: terminal write is graded on final server state. For the op ledger we append
+#: the ops each task class actually needs so "off-path" means wandered away
+#: from the solution — not "called the write the grade requires".
+_CONTROLLED_TERMINALS: dict[str, tuple[str, ...]] = {
+    "R": ("get_episode",),
+    "W-safe": ("get_episode", "patch_episode"),
+    "W-lossy": ("get_episode", "patch_episode"),
+    "W-irrev": ("get_episode", "archive_episode"),
+    "RW-fan": ("get_episode", "list_episodes", "append_episode_tag"),
+}
+
+
+def task_class_from_id(task_id: str) -> str | None:
+    """Parse ``W-safe`` / ``R`` / … from a controlled task id."""
+    for cls in ("RW-fan", "W-safe", "W-lossy", "W-irrev", "R"):
+        if task_id.endswith("-" + cls):
+            return cls
+    return None
+
+
+def augment_gold_for_controlled_tasks(
+    gold_by_task: dict[str, tuple[str, ...]],
+) -> dict[str, tuple[str, ...]]:
+    """Add terminal ops implied by controlled task class (see module note)."""
+    out: dict[str, tuple[str, ...]] = {}
+    for tid, ops in gold_by_task.items():
+        cls = task_class_from_id(tid)
+        extra = _CONTROLLED_TERMINALS.get(cls or "", ())
+        merged = list(ops)
+        for op in extra:
+            if op not in merged:
+                merged.append(op)
+        out[tid] = tuple(merged)
+    return out
 
 
 def gold_by_task_from_rows(rows: list[dict[str, Any]]) -> dict[str, tuple[str, ...]]:

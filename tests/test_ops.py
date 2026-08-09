@@ -6,7 +6,8 @@ import json
 
 from harness.engine.dispatch import DESCRIBE, INVOKE, SEARCH
 from harness.engine.ops import (
-    build_ledger, expected_share_from_gold, family_of, resolve_call,
+    augment_gold_for_controlled_tasks, build_ledger, expected_share_from_gold,
+    family_of, resolve_call,
 )
 
 
@@ -75,9 +76,12 @@ def test_user_arm_resolves_by_axes_not_name() -> None:
 
 
 def test_family_rollup_from_op_id() -> None:
-    assert family_of("get_episode") == "episode"
+    assert family_of("get_episode") == "episodes"
     assert family_of("list_series") == "series"
-    assert family_of("archive_episode") == "episode"
+    assert family_of("archive_episode") == "episodes"
+    assert family_of("append_episode_tag") == "episodes"
+    assert family_of("list_assets") == "assets"
+    assert family_of("list_catalog_entrys") == "catalog_entries"
 
 
 def _write_trace(dir, name: str, payload: dict) -> None:
@@ -226,8 +230,8 @@ def test_parsed_fidelity_labelled_in_render(tmp_path) -> None:
         "answerable": True, "task_class": "R", "core_id": "c0",
     }]
     text = build_ledger(rows, traces).render()
-    assert "[parsed]" in text
-    assert "fidelity:" in text
+    assert "parsing transcripts" in text or "shell/code" in text
+    assert "Notes" in text
 
 
 def test_expected_share_from_gold() -> None:
@@ -237,6 +241,66 @@ def test_expected_share_from_gold() -> None:
     })
     assert shares["get_episode"] == 2 / 3
     assert shares["list_series"] == 1 / 3
+
+
+def test_augment_gold_adds_terminal_writes() -> None:
+    """Controlled gold is navigation-only; ledger must count required writes."""
+    raw = {
+        "core-000-R": ("list_studios", "list_episodes"),
+        "core-000-W-safe": ("list_studios", "list_episodes"),
+        "core-000-W-irrev": ("list_studios", "list_episodes"),
+        "core-000-RW-fan": ("list_studios", "list_episodes"),
+    }
+    out = augment_gold_for_controlled_tasks(raw)
+    assert "get_episode" in out["core-000-R"]
+    assert "patch_episode" in out["core-000-W-safe"]
+    assert "archive_episode" in out["core-000-W-irrev"]
+    assert "append_episode_tag" in out["core-000-RW-fan"]
+
+
+def test_arm_cards_and_skill_contrasts(tmp_path) -> None:
+    traces = tmp_path / "traces"
+    traces.mkdir()
+    # A1 leans on list_assets (errors); B1-auth leans on get_episode (clean).
+    _write_trace(traces, "a1.json", {
+        "run_id": "a1", "task_id": "core-000-R",
+        "variant": {"transport": "mcp", "discovery": "eager-all",
+                    "invocation": "tool-call", "preset": "A1"},
+        "calls": [
+            {"call": {"tool": "list_assets"}, "result": {"status": 500}},
+            {"call": {"tool": "list_assets"}, "result": {"status": 500}},
+            {"call": {"tool": "get_episode"}, "result": {"status": 200}},
+        ],
+    })
+    _write_trace(traces, "b1.json", {
+        "run_id": "b1", "task_id": "core-000-R",
+        "variant": {"transport": "mcp", "discovery": "eager-all",
+                    "invocation": "tool-call", "preset": "B1-auth"},
+        "calls": [
+            {"call": {"tool": "get_episode"}, "result": {"status": 200}},
+            {"call": {"tool": "get_episode"}, "result": {"status": 200}},
+            {"call": {"tool": "list_assets"}, "result": {"status": 200}},
+        ],
+    })
+    rows = [
+        {"run_id": "a1", "arm": "A1", "task_id": "core-000-R", "outcome": "fail",
+         "answerable": True, "task_class": "R", "core_id": "c0",
+         "gold_ops": ["get_episode"]},
+        {"run_id": "b1", "arm": "B1-auth", "task_id": "core-000-R",
+         "outcome": "pass", "answerable": True, "task_class": "R",
+         "core_id": "c0", "gold_ops": ["get_episode"]},
+    ]
+    ledger = build_ledger(rows, traces)
+    cards = {c.arm: c for c in ledger.arm_cards()}
+    assert cards["A1"].lean_on == "list_assets"
+    assert cards["B1-auth"].lean_on == "get_episode"
+    text = ledger.render()
+    assert "D. Per-arm cards" in text
+    assert "E. Skill / discovery contrasts" in text
+    contrasts = ledger.skill_contrasts(metric="error_rate", min_abs_delta=0.01)
+    hit = [c for c in contrasts if c.arm_a == "A1" and c.arm_b == "B1-auth"]
+    assert hit and hit[0].deltas
+    assert any(d.op_id == "list_assets" and d.delta < 0 for d in hit[0].deltas)
 
 
 def test_arm_deltas_descriptive(tmp_path) -> None:

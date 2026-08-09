@@ -997,7 +997,9 @@ def _gold_by_task_for_report(manifest: dict, rows: list) -> dict[str, tuple[str,
     unavailable rather than pretending they are zero. Row-level ``gold_ops``
     (tests) still win via ``build_ledger``'s merge.
     """
-    from .engine.ops import gold_ops_from_sequence
+    from .engine.ops import (
+        augment_gold_for_controlled_tasks, gold_ops_from_sequence,
+    )
 
     if manifest.get("seed") is None or not manifest.get("cores"):
         return {}
@@ -1019,11 +1021,13 @@ def _gold_by_task_for_report(manifest: dict, rows: list) -> dict[str, tuple[str,
         pack = TaskPack.parse(raw)
     except Exception:  # noqa: BLE001 — field dirs / old manifests
         return {}
-    return {
+    gold = {
         t.id: gold_ops_from_sequence(t.gold_call_sequence)
         for t in pack.tasks
         if t.gold_call_sequence
     }
+    # Navigation gold alone marks every required write as off-path; augment.
+    return augment_gold_for_controlled_tasks(gold)
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
