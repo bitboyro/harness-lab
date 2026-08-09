@@ -111,7 +111,7 @@ The freeze check. Every field, and the one thing that reads it. **A field with n
 | Field | Consumer | Unlocks |
 |---|---|---|
 | `schema_version` | Pack loader | Refuses unknown versions instead of guessing; recorded in every trace so old traces stay interpretable |
-| `pack.id` | Trace store; report header | Joins runs to the pack that produced them |
+| `pack.id` | Manifest (`pack_name`); `harness compare` parameter table | Joins runs to the pack that produced them. ⚠ AMENDED: previously listed "Trace store; report header", but the report header prints the run `--id`, and `pack.id` was only used as a derived-spec title. Field manifests now record it as `pack_name` so a comparison can name the pack. |
 | `pack.description` | Report header | Human context on the artifact |
 | `pack.report_class` | Report layer | Refuses to pool controlled with field results |
 | `api.openapi` | T1 lint; material generators | Static scorecard; generated MCP defs / skills / docs |
