@@ -1,0 +1,36 @@
+# Standard ladder plus exploratory cells and an error_detail sweep.
+run_plan:
+  id: full
+  rationale: >
+    Everything in standard, plus D3 (meta-tools from code), E1 (retrieval),
+    and M1 (MRTR confirmation). Use when the confirmatory ladder has landed
+    and the exploratory cells are worth the extra spend.
+  base:
+    model: gpt-5.6-luna
+    reasoning_effort: low
+    temperature: 0.0
+    caching: "off"
+    repeats: 3
+    surface_size: 50
+    schema_detail: standard
+    response_shape: as-is
+    error_detail: field-scoped
+    doc_budget: standard
+    mcp_revision: "2026-07-28"
+  include:
+    presets: [Z0, Z1, A1, A2, B1, B2, B1-auth, B2-auth, C1, D1, D2, D2-auth,
+              D3, E1, M1]
+  tasks:
+    generate: {seed: 1, cores: 40, fan_out: 8, difficulty: hard}
+  sweep:
+    error_detail: [terse, field-scoped, field-scoped+remedy]
+    arms: [A1, D1]
+  budget: {max_usd: 500}
+  confirmatory:
+    - contrast: [A1, A2]
+      hypothesis: Meta-tool discovery cuts static context at equal success.
+  exploratory:
+    - contrast: [D1, D3]
+      hypothesis: Reaching meta-tools from code changes the cost shape.
+    - contrast: [A1, E1]
+      hypothesis: Harness-side retrieval beats eager-all on large surfaces.

@@ -107,6 +107,73 @@ class ConfigError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class Axis:
+    """One dimension of the variant space.
+
+    Declared once so ``axis_summary``, the CLI flag block, the arm loader and
+    the run-plan validator read the same table. ``Variant`` stays an explicit
+    dataclass — every field required on purpose (V3) — and an AST test asserts
+    the two stay in lockstep.
+    """
+
+    name: str
+    enum: type[StrEnum] | None  # None for scalars (surface_size, model, …)
+    group: str  # structural | affordance | run
+    structural: bool = False  # may a shipped arm pin it?
+    cli_flag: str | None = None
+
+
+AXES: tuple[Axis, ...] = (
+    Axis("transport", Transport, "structural", structural=True),
+    Axis("discovery", Discovery, "structural", structural=True),
+    Axis("invocation", Invocation, "structural", structural=True),
+    Axis("instructions", Instructions, "structural", structural=True),
+    Axis("confirmation", Confirmation, "structural", structural=True),
+    Axis("mcp_revision", McpRevision, "structural", structural=True,
+         cli_flag="--mcp-revision"),
+    Axis("schema_detail", SchemaDetail, "affordance",
+         cli_flag="--schema-detail"),
+    Axis("response_shape", ResponseShape, "affordance",
+         cli_flag="--response-shape"),
+    Axis("error_detail", ErrorDetail, "affordance",
+         cli_flag="--error-detail"),
+    Axis("doc_budget", DocBudget, "affordance", cli_flag="--doc-budget"),
+    Axis("surface_size", None, "affordance", cli_flag="--surface-size"),
+    Axis("model", None, "run", cli_flag="--model"),
+    Axis("reasoning_effort", None, "run", cli_flag="--reasoning-effort"),
+    Axis("temperature", None, "run", cli_flag="--temperature"),
+    Axis("caching", Caching, "run", cli_flag="--caching"),
+    Axis("repeats", None, "run", cli_flag="--repeats"),
+)
+
+
+def axis_by_name(name: str) -> Axis | None:
+    for axis in AXES:
+        if axis.name == name:
+            return axis
+    return None
+
+
+def coerce_axis_value(name: str, value: Any) -> Any:
+    """Parse a YAML/CLI string into the typed axis value."""
+    axis = axis_by_name(name)
+    if axis is None:
+        raise ConfigError(f"unknown axis {name!r}")
+    if value is None:
+        return None
+    # PyYAML turns bare 2026-07-28 into a date; MCP revisions are strings.
+    if hasattr(value, "isoformat") and not isinstance(value, str):
+        value = value.isoformat()
+    if axis.enum is not None:
+        return axis.enum(value)
+    if name in ("surface_size", "repeats"):
+        return int(value)
+    if name == "temperature":
+        return float(value)
+    return value
+
+
+@dataclass(frozen=True, slots=True)
 class Variant:
     """A complete axis assignment.
 
@@ -332,82 +399,133 @@ def axis_summary(variant: Variant) -> dict[str, str]:
     }
 
 
-# Partial axis assignments. Structural axes only — affordance and run axes come
-# from the run plan's `base`, so a preset never silently pins them.
-_PRESETS: dict[str, dict[str, Any]] = {
-    "A1": dict(transport=Transport.MCP, discovery=Discovery.EAGER_ALL,
-               invocation=Invocation.TOOL_CALL, instructions=Instructions.NONE,
-               confirmation=Confirmation.NONE),
-    "A2": dict(transport=Transport.MCP, discovery=Discovery.META_TOOLS,
-               invocation=Invocation.TOOL_CALL, instructions=Instructions.NONE,
-               confirmation=Confirmation.NONE),
-    "B1": dict(transport=Transport.MCP, discovery=Discovery.EAGER_ALL,
-               invocation=Invocation.TOOL_CALL,
-               instructions=Instructions.SKILL_GENERATED_FLAT,
-               confirmation=Confirmation.NONE),
-    "B2": dict(transport=Transport.MCP, discovery=Discovery.META_TOOLS,
-               invocation=Invocation.TOOL_CALL,
-               instructions=Instructions.SKILL_GENERATED_FLAT,
-               confirmation=Confirmation.NONE),
-    "B1-auth": dict(transport=Transport.MCP, discovery=Discovery.EAGER_ALL,
-                    invocation=Invocation.TOOL_CALL,
-                    instructions=Instructions.SKILL_AUTHORED_FLAT,
-                    confirmation=Confirmation.NONE),
-    "B2-auth": dict(transport=Transport.MCP, discovery=Discovery.META_TOOLS,
-                    invocation=Invocation.TOOL_CALL,
-                    instructions=Instructions.SKILL_AUTHORED_FLAT,
-                    confirmation=Confirmation.NONE),
-    "C1": dict(transport=Transport.HTTP_REST, discovery=Discovery.DOCS,
-               invocation=Invocation.SHELL, instructions=Instructions.DOCS_FLAT,
-               confirmation=Confirmation.NONE),
-    "C2": dict(transport=Transport.HTTP_REST, discovery=Discovery.DOCS,
-               invocation=Invocation.SHELL,
-               instructions=Instructions.DOCS_PROGRESSIVE,
-               confirmation=Confirmation.NONE),
-    "D1": dict(transport=Transport.MCP, discovery=Discovery.CODE_FS,
-               invocation=Invocation.CODE, instructions=Instructions.NONE,
-               confirmation=Confirmation.NONE),
-    "D2": dict(transport=Transport.MCP, discovery=Discovery.CODE_FS,
-               invocation=Invocation.CODE,
-               instructions=Instructions.SKILL_GENERATED_PROGRESSIVE,
-               confirmation=Confirmation.NONE),
-    "D2-auth": dict(transport=Transport.MCP, discovery=Discovery.CODE_FS,
-                    invocation=Invocation.CODE,
-                    instructions=Instructions.SKILL_AUTHORED_PROGRESSIVE,
-                    confirmation=Confirmation.NONE),
-    "D3": dict(transport=Transport.MCP, discovery=Discovery.META_TOOLS,
-               invocation=Invocation.CODE,
-               instructions=Instructions.SKILL_GENERATED_FLAT,
-               confirmation=Confirmation.NONE),
-    "E1": dict(transport=Transport.MCP, discovery=Discovery.RETRIEVAL,
-               invocation=Invocation.TOOL_CALL, instructions=Instructions.NONE,
-               confirmation=Confirmation.NONE),
-    "M1": dict(transport=Transport.MCP, discovery=Discovery.EAGER_ALL,
-               invocation=Invocation.TOOL_CALL, instructions=Instructions.NONE,
-               confirmation=Confirmation.MRTR, mcp_revision=McpRevision.R2026_07_28),
-    "Z0": dict(transport=Transport.NONE, discovery=Discovery.NONE,
-               invocation=Invocation.NONE, instructions=Instructions.NONE,
-               confirmation=Confirmation.NONE),
-    "Z1": dict(transport=Transport.IN_PROCESS, discovery=Discovery.NONE,
-               invocation=Invocation.NONE, instructions=Instructions.NONE,
-               confirmation=Confirmation.NONE),
-}
+def split_label(arm: str) -> tuple[str, dict[str, str]]:
+    """Parse an arm label into ``(base, {axis: value, …})``.
 
-PRESET_NAMES = tuple(_PRESETS)
+    Canonical form is ``A1@error_detail=terse,doc_budget=verbose``. The bare
+    legacy form ``A1@terse`` could only ever have meant ``error_detail``, so
+    that axis is inferred rather than guessed. Material-matrix cells use the
+    same grammar (``D-lib@skill=catalog-v2,helpers=walk_a``).
+    """
+    if "@" not in arm:
+        return arm, {}
+    base, rest = arm.split("@", 1)
+    if not rest:
+        return base, {}
+    overrides: dict[str, str] = {}
+    if "=" not in rest and "," not in rest:
+        # Legacy sweep label: only error_detail was ever swept this way.
+        overrides["error_detail"] = rest
+        return base, overrides
+    for part in rest.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part:
+            raise ConfigError(
+                f"arm label {arm!r}: sweep/matrix part {part!r} is missing '='. "
+                f"Use AXIS=value (or the legacy bare form ARM@terse for "
+                f"error_detail only)."
+            )
+        axis, value = part.split("=", 1)
+        overrides[axis.strip()] = value.strip()
+    return base, overrides
+
+
+def format_label(base: str, overrides: dict[str, str], *, axis_order: tuple[str, ...] = ()) -> str:
+    """Build a deterministic arm label. Axes follow ``axis_order`` when given."""
+    if not overrides:
+        return base
+    keys = [k for k in axis_order if k in overrides] if axis_order else sorted(overrides)
+    keys.extend(k for k in sorted(overrides) if k not in keys)
+    # Single bare legacy form when the only override is error_detail — kept so
+    # new runs still round-trip through older readers that only split on '@'.
+    if keys == ["error_detail"] and axis_order == ():
+        return f"{base}@{overrides['error_detail']}"
+    body = ",".join(f"{k}={overrides[k]}" for k in keys)
+    return f"{base}@{body}"
+
+
+# Loaded once from engine/arms/builtin.yaml. The dict shape matches the old
+# in-code `_PRESETS` literal so the frozen-ladder equality test can prove this
+# refactor did not move a single arm.
+_PRESETS: dict[str, dict[str, Any]] | None = None
+_EXTRA_ARMS: dict[str, dict[str, Any]] = {}
+
+
+def _ensure_presets() -> dict[str, dict[str, Any]]:
+    global _PRESETS
+    if _PRESETS is None:
+        from .armspec import arms_as_preset_dicts, load_arms
+        _PRESETS = arms_as_preset_dicts(load_arms())
+    return {**_PRESETS, **_EXTRA_ARMS}
+
+
+def register_plan_arms(extra: dict[str, Any]) -> None:
+    """Merge plan-declared arms into the lookup used by ``preset()``."""
+    from .armspec import load_arms
+    global _EXTRA_ARMS
+    _ensure_presets()
+    loaded = load_arms(extra=extra)
+    builtin_names = set(_PRESETS or {})
+    _EXTRA_ARMS = {
+        name: dict(arm.axes)
+        for name, arm in loaded.items()
+        if name not in builtin_names or name in extra
+    }
+
+
+def builtin_arm_names() -> tuple[str, ...]:
+    _ensure_presets()
+    assert _PRESETS is not None
+    return tuple(_PRESETS)
+
+
+def _preset_names() -> tuple[str, ...]:
+    return tuple(_ensure_presets())
+
+
+class _PresetNames:
+    """Lazy stand-in for the old ``PRESET_NAMES`` tuple."""
+
+    def __iter__(self):
+        return iter(_preset_names())
+
+    def __contains__(self, item: object) -> bool:
+        return item in _ensure_presets()
+
+    def __len__(self) -> int:
+        return len(_ensure_presets())
+
+    def __getitem__(self, idx):
+        return _preset_names()[idx]
+
+
+PRESET_NAMES = _PresetNames()  # type: ignore[assignment]
 
 
 def preset(name: str, **base: Any) -> Variant:
     """Build a Variant from a preset name plus the run plan's base axes.
 
     ``base`` supplies the affordance and run axes. A preset never pins those —
-    they belong to the comparison, not to the packaging method.
+    they belong to the comparison, not to the packaging method. Lookup is the
+    YAML arm table (plus any plan-registered arms), not a Python dict literal.
     """
-    if name not in _PRESETS:
-        raise ConfigError(f"unknown preset {name!r}; known: {', '.join(PRESET_NAMES)}")
-    fields = {**_PRESETS[name], **base, "preset": name}
+    presets = _ensure_presets()
+    base_name, label_overrides = split_label(name)
+    lookup = base_name if base_name in presets else name
+    if lookup not in presets:
+        known = ", ".join(presets)
+        raise ConfigError(f"unknown preset {name!r}; known: {known}")
+    fields = {**presets[lookup], **base, "preset": base_name}
+    for axis, value in label_overrides.items():
+        if axis_by_name(axis) is not None:
+            fields[axis] = coerce_axis_value(axis, value)
     # Presets that do not use MCP must not inherit a revision from `base`.
     if fields.get("transport") is not Transport.MCP:
         fields.pop("mcp_revision", None)
+    variant_fields = set(Variant.__dataclass_fields__)
+    fields = {k: v for k, v in fields.items() if k in variant_fields}
     try:
         return Variant(**fields)
     except TypeError as e:

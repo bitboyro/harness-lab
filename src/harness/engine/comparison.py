@@ -120,10 +120,20 @@ PARAMETERS: tuple[Parameter, ...] = (
               meaning="the code that produced the ledger"),
     Parameter("presets", "identity", manifest_key="presets", row_key="arm",
               meaning="the arms the run was asked for"),
+    Parameter("arms digest", "identity", manifest_key="arms_digest",
+              meaning="content address of every resolved arm (axes + materials)"),
+    Parameter("plan id", "identity", manifest_key="plan_id",
+              meaning="run plan id, when the matrix came from a plan file"),
+    Parameter("plan digest", "identity", manifest_key="plan_digest",
+              meaning="content address of the resolved run plan"),
+    Parameter("plan path", "identity", manifest_key="plan_path",
+              meaning="path of the plan file that produced this matrix"),
     Parameter("planned", "identity", manifest_key="planned",
               meaning="cells the run intended to fill"),
     Parameter("resumed", "identity", manifest_key="resumed",
               meaning="cells already on disk when the run started"),
+    Parameter("excluded arms", "identity", manifest_key="excluded_arms",
+              meaning="arms dropped at load with the reason"),
     # ---- model ----
     Parameter("model", "model", manifest_key="model", row_key="model",
               pooling=True, meaning="the model under test"),
@@ -185,9 +195,10 @@ PARAMETERS: tuple[Parameter, ...] = (
               meaning="workers — affects wall clock, not outcomes"),
 )
 
-#: Manifest keys the drift test does not demand a `Parameter` row for. Empty
-#: today: every key `cmd_run` writes is a parameter someone might have changed.
-MANIFEST_IGNORED: frozenset[str] = frozenset()
+#: Manifest keys the drift test does not demand a `Parameter` row for.
+#: `arms` / `targets` are per-entry tables — compared by their digests above,
+#: not as a single scalar Parameter.
+MANIFEST_IGNORED: frozenset[str] = frozenset({"arms", "targets"})
 
 #: The ledger's pooling fields under the names the parameter table uses, so a
 #: run-level break and an arm-level break on the same boundary say the same word.

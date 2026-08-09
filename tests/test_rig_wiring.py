@@ -21,7 +21,8 @@ from harness.engine.packaging import Call
 from harness.experiment.domain import WorldShape
 from harness.experiment.http import CatalogServer
 from harness.experiment.mcp_surface import McpSurface, transport_for
-from harness.experiment.rig import METHOD_FOR_PRESET, RigInstance, _bound_method
+from harness.engine.axes import PRESET_NAMES
+from harness.experiment.rig import RigInstance, bound_method
 from harness.experiment.server import CatalogApi
 
 SMALL = WorldShape(studios=1, series_per_studio=1, seasons_per_series=1,
@@ -39,12 +40,12 @@ def rig():
 # ---- every preset is runnable --------------------------------------------
 
 @pytest.mark.parametrize(
-    "name", [n for n in METHOD_FOR_PRESET if not n.endswith("-auth")]
+    "name", [n for n in PRESET_NAMES if not n.endswith("-auth")]
 )
 def test_every_preset_builds_a_working_executor(name, rig) -> None:
     """The gap this whole module closes: no arm may be unrunnable."""
     variant = preset(name, **RIG_AXES)
-    method = _bound_method(name, variant, rig)
+    method = bound_method(variant, rig)
     materials = method.materialize(rig.spec, variant)
     executor = method.executor(materials)
 
@@ -57,7 +58,7 @@ def test_tool_arms_see_the_whole_surface_and_discovery_arms_do_not(rig) -> None:
     """The mechanism RQ2 is about, visible in static cost."""
     def static(name: str) -> int:
         v = preset(name, **RIG_AXES)
-        return _bound_method(name, v, rig).materialize(rig.spec, v).static_tokens
+        return bound_method(v, rig).materialize(rig.spec, v).static_tokens
 
     assert static("A2") < static("A1")
     assert static("D1") < static("A1")

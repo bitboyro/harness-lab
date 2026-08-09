@@ -93,11 +93,9 @@ def test_meta_tools_do_not_block_undescribed_invocation(spec) -> None:
 # ---- retrieval (E1) ------------------------------------------------------
 
 def test_e1_now_resolves_to_a_plugin(spec) -> None:
-    from harness.engine import methods
-    from harness.engine.packaging import _REGISTRY
-    _REGISTRY.clear()
-    methods.register_defaults(lambda m, v: Echo())
-    assert resolve(preset("E1", **BASE_AXES))
+    from harness.engine.methods import reset_defaults
+    reset_defaults()
+    assert resolve(preset("E1", **BASE_AXES)).name == "retrieval-mcp"
 
 
 def test_retrieval_narrows_the_surface(spec) -> None:

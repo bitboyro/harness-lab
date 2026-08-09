@@ -24,11 +24,8 @@ from harness.engine.executors import (
 )
 from harness.engine.generate import ApiSpec, load_spec
 from harness.engine.mcp import McpClient
-from harness.engine.methods import (
-    register_skill_root as _register_skill_root,
-    CodeFsMcp, DocsShell, EagerAllMcp, GoldPreExecuted, MetaToolsMcp, NoTools,
-    RetrievalMcp,
-)
+from harness.engine.methods import register_defaults, register_skill_root as _register_skill_root
+from harness.engine.packaging import resolve
 
 from .domain import WorldShape, build_world
 from .http import CatalogServer
@@ -41,19 +38,6 @@ from .server import CatalogApi
 # than hardcoded in the engine: `skills/` at a user's cwd is *their* convention
 # for *their* API, and the engine has no business knowing this package exists.
 _register_skill_root(Path(__file__).resolve().parent)
-
-#: Which packaging method serves each preset.
-METHOD_FOR_PRESET = {
-    "A1": EagerAllMcp, "B1": EagerAllMcp, "B1-auth": EagerAllMcp,
-    "A2": MetaToolsMcp, "B2": MetaToolsMcp, "B2-auth": MetaToolsMcp,
-    "D3": MetaToolsMcp,
-    "D1": CodeFsMcp, "D2": CodeFsMcp, "D2-auth": CodeFsMcp,
-    "C1": DocsShell, "C2": DocsShell,
-    "E1": RetrievalMcp,
-    "M1": EagerAllMcp,
-    "Z0": NoTools,
-    "Z1": GoldPreExecuted,
-}
 
 
 @dataclass
@@ -152,19 +136,6 @@ class RigInstance:
         self.teardown()
 
 
-def method_for(preset_name: str, rig: RigInstance):
-    """Build the packaging method for a preset, bound to this instance."""
-    cls = METHOD_FOR_PRESET.get(preset_name)
-    if cls is None:
-        raise KeyError(f"no packaging method mapped for preset {preset_name!r}")
-
-    if cls in (EagerAllMcp, MetaToolsMcp, RetrievalMcp):
-        # These need an executor factory; the variant arrives with the call.
-        return cls(make_executor=lambda materials, variant:
-                   rig.executor_for(variant, materials))
-    return cls()
-
-
 def run_one(
     preset_name: str,
     variant: Variant,
@@ -187,9 +158,10 @@ def run_one(
     from harness.engine.grader import grade
     from harness.engine.loop import AgentRunner
 
+    del preset_name  # retained on the Target.run signature for callers/ledger
     with RigInstance(seed=seed, shape=shape or WorldShape(),
                      surface_size=surface_size) as rig:
-        method = _bound_method(preset_name, variant, rig, task)
+        method = bound_method(variant, rig, task)
 
         try:
             runner = AgentRunner(
@@ -240,20 +212,31 @@ class RigTarget:
                        on_turn=self.on_turn)
 
 
-def _bound_method(preset_name: str, variant: Variant, rig: RigInstance,
-                  task=None):
-    """A packaging method whose executor is wired to this rig instance."""
-    cls = METHOD_FOR_PRESET.get(preset_name)
-    if cls is None:
-        raise KeyError(f"no packaging method mapped for preset {preset_name!r}")
+def bound_method(variant: Variant, rig: RigInstance, task=None):
+    """A packaging method whose executor is wired to this rig instance.
 
-    if cls is GoldPreExecuted:
-        return cls(prefetched=prefetch_gold(rig, task) if task else "")
-    if cls in (EagerAllMcp, MetaToolsMcp, RetrievalMcp):
-        return cls(make_executor=lambda materials, _v=None:
-                   rig.executor_for(variant, materials),
-                   env=rig.sandbox_env())
-    return cls(env=rig.sandbox_env())
+    Selection is by ``resolve(variant)`` — axis match, not preset name. Binding
+    is a capability negotiation against ``method.needs``, so adding a method
+    never means teaching this function a new class identity.
+    """
+    register_defaults()
+    method = resolve(variant)
+    kwargs: dict[str, Any] = {}
+    if "prefetch" in method.needs:
+        kwargs["prefetched"] = prefetch_gold(rig, task) if task else ""
+    if "sandbox_env" in method.needs:
+        kwargs["env"] = rig.sandbox_env()
+    if "executor_factory" in method.needs:
+        kwargs["make_executor"] = (
+            lambda materials, _v=None, _variant=variant: rig.executor_for(
+                _variant, materials
+            )
+        )
+    return method.bind(**kwargs)
+
+
+# Back-compat alias for tests that imported the private name.
+_bound_method = bound_method
 
 
 def prefetch_gold(rig: RigInstance, task) -> str:

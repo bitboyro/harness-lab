@@ -95,6 +95,16 @@ class RunPlan:
     confirmatory: tuple[Contrast, ...] = ()
     exploratory: tuple[Contrast, ...] = ()
     exclude: tuple[dict[str, Any], ...] = ()
+    #: Plan-declared arms merged over builtins (extends / materials / matrix).
+    arms: dict[str, Any] = field(default_factory=dict)
+    #: ``{generate: {...}}`` or ``{pack: path}``. Empty → use task_count only.
+    tasks: dict[str, Any] = field(default_factory=dict)
+    #: Axis sweep block. Expanded by the CLI / Phase 4; stored here as declared.
+    sweep: dict[str, Any] = field(default_factory=dict)
+    #: ``{max_usd, calibrate_from}``. Cap is hard; calibration is optional.
+    budget: dict[str, Any] = field(default_factory=dict)
+    #: Path the plan was loaded from, for approval digests and the manifest.
+    path: str | None = field(default=None, compare=False)
     #: Set only by an explicit human approval step.
     approved: bool = field(default=False, compare=False)
 
@@ -106,10 +116,45 @@ class RunPlan:
             )
         if not self.presets:
             raise ConfigError(f"run plan {self.id!r} selects no presets")
+        if self.arms:
+            from .axes import register_plan_arms
+            register_plan_arms(self.arms)
 
     def variants(self) -> dict[str, Variant]:
         """Materialise every selected cell. Raises on an invalid assignment."""
-        return {name: preset(name, **self.base) for name in self.presets}
+        # Coerce string axis values from YAML into typed enums.
+        from .axes import axis_by_name, coerce_axis_value
+        base: dict[str, Any] = {}
+        for key, value in self.base.items():
+            if axis_by_name(key) is not None:
+                base[key] = coerce_axis_value(key, value)
+            else:
+                base[key] = value
+        return {name: preset(name, **base) for name in self.presets}
+
+    def digest(self) -> str:
+        """Content address of the resolved plan — approval is keyed on this."""
+        import hashlib
+        import json
+        payload = {
+            "id": self.id,
+            "rationale": self.rationale,
+            "base": self.base,
+            "presets": list(self.presets),
+            "task_count": self.task_count,
+            "arms": self.arms,
+            "tasks": self.tasks,
+            "sweep": self.sweep,
+            "budget": self.budget,
+        }
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, default=str).encode()
+        ).hexdigest()[:16]
+
+    @property
+    def max_usd(self) -> float | None:
+        raw = self.budget.get("max_usd")
+        return float(raw) if raw is not None else None
 
     def validate_contrasts(self) -> None:
         variants = self.variants()
@@ -169,17 +214,28 @@ class RunPlan:
             ),
         )
 
-    def approve(self, estimate: CostEstimate) -> None:
-        """Record that a human has seen the projected cost."""
+    def approve(self, estimate: CostEstimate, *, persist: bool = False) -> None:
+        """Record that a human has seen the projected cost.
+
+        Persistence is opt-in: the CLI passes ``persist=True`` so
+        ``harness run --plan`` can find the approval later. In-process tests
+        keep the old in-memory behaviour and must not write ``.harness/``.
+        """
         self.approved = True
         self._approved_for = estimate.runs  # type: ignore[attr-defined]
+        if persist:
+            persist_approval(self, estimate)
 
     def require_approval(self, estimate: CostEstimate) -> None:
+        if self.is_approved(estimate):
+            self.approved = True
+            self._approved_for = estimate.runs  # type: ignore[attr-defined]
+            return
         if not self.approved:
             raise BudgetNotApproved(
                 f"run plan {self.id!r} projects ~${estimate.projected_usd:,.2f} "
                 f"across {estimate.runs:,} runs and has not been approved. "
-                "Spend is gated per phase; nothing executes unseen."
+                "Run `harness plan --approve` first, or pass --yes."
             )
         if getattr(self, "_approved_for", None) != estimate.runs:
             raise BudgetNotApproved(
@@ -187,9 +243,48 @@ class RunPlan:
                 "Re-approve after changing the plan."
             )
 
+    def is_approved(self, estimate: CostEstimate) -> bool:
+        """Whether `.harness/approved.json` covers this digest + run count."""
+        record = load_approvals().get(self.digest())
+        if not record:
+            return False
+        return int(record.get("runs", -1)) == estimate.runs
+
+
+_APPROVAL_PATH = Path(".harness/approved.json")
+
+
+def persist_approval(plan: RunPlan, estimate: CostEstimate,
+                     path: Path | None = None) -> None:
+    """Write approval keyed on ``(plan digest, estimate.runs)``."""
+    import json
+    target = path or _APPROVAL_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
+    data = load_approvals(target)
+    data[plan.digest()] = {
+        "plan_id": plan.id,
+        "runs": estimate.runs,
+        "projected_usd": estimate.projected_usd,
+        "path": plan.path,
+    }
+    target.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+
+
+def load_approvals(path: Path | None = None) -> dict[str, Any]:
+    import json
+    target = path or _APPROVAL_PATH
+    if not target.is_file():
+        return {}
+    try:
+        raw = json.loads(target.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
 
 def load_plan(path: str | Path) -> RunPlan:
-    raw = yaml.safe_load(Path(path).read_text())
+    path = Path(path)
+    raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict) or "run_plan" not in raw:
         raise ConfigError(f"{path}: expected a top-level 'run_plan' mapping")
     rp = raw["run_plan"]
@@ -200,13 +295,29 @@ def load_plan(path: str | Path) -> RunPlan:
             for c in rp.get(key, [])
         )
 
+    tasks = dict(rp.get("tasks") or {})
+    task_count = int(rp.get("task_count", 1))
+    # tasks.generate.cores drives the controlled world size; prefer it over a
+    # bare task_count when both appear, so a plan file is self-describing.
+    if "generate" in tasks:
+        gen = tasks["generate"] or {}
+        cores = int(gen.get("cores", 0) or 0)
+        # Rough: each core yields ~5 matched tasks in the controlled pack.
+        if cores and "task_count" not in rp:
+            task_count = cores * 5
+
     return RunPlan(
         id=rp["id"],
         rationale=rp.get("rationale", ""),
         base=rp.get("base", {}),
         presets=tuple(rp.get("include", {}).get("presets", [])),
-        task_count=int(rp.get("task_count", 1)),
+        task_count=task_count,
         confirmatory=contrasts("confirmatory"),
         exploratory=contrasts("exploratory"),
         exclude=tuple(rp.get("exclude", [])),
+        arms=dict(rp.get("arms") or {}),
+        tasks=tasks,
+        sweep=dict(rp.get("sweep") or {}),
+        budget=dict(rp.get("budget") or {}),
+        path=str(path),
     )

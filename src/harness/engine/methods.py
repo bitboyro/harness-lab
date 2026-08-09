@@ -10,8 +10,8 @@ Contract: archive/reference/packaging-axes.md#plugin-interface
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Callable
+from dataclasses import dataclass, replace
+from typing import Any, Callable, Self
 
 from . import generate
 from .axes import Discovery, Instructions, Invocation, Transport, Variant
@@ -20,7 +20,10 @@ from .executors import (
     shell_executor,
 )
 from .generate import ApiSpec
-from .packaging import ContextBlock, CostBreakdown, Executor, Materials, register
+from .packaging import (
+    ContextBlock, CostBreakdown, Executor, Materials, clear_registry, register,
+    registered,
+)
 
 #: Injected by the runner: builds the transport-bound executor for a variant.
 ExecutorFactory = Callable[[Materials, Variant], Executor]
@@ -152,6 +155,28 @@ class _Base:
     #: parallel runs clobber each other's BASE_URL and silently talk to the
     #: wrong catalog, which grades as a failure and looks like a model error.
     env: dict[str, str] | None = None
+    #: Capabilities this method needs its target to supply. Declared once;
+    #: the binder negotiates — it never remembers which classes want what.
+    needs: frozenset[str] = frozenset()
+    #: Named material slots this method accepts (Phase 2). Empty today.
+    slots: frozenset[str] = frozenset()
+
+    def bind(
+        self,
+        *,
+        make_executor: ExecutorFactory | None = None,
+        env: dict[str, str] | None = None,
+        prefetched: str | None = None,
+    ) -> Self:
+        """Wire a registered prototype for one run without mutating the registry."""
+        kwargs: dict[str, Any] = {}
+        if make_executor is not None:
+            kwargs["make_executor"] = make_executor
+        if env is not None:
+            kwargs["env"] = env
+        if prefetched is not None and hasattr(self, "prefetched"):
+            kwargs["prefetched"] = prefetched
+        return replace(self, **kwargs) if kwargs else self
 
     def executor(self, materials: Materials) -> Executor:
         raise NotImplementedError
@@ -171,6 +196,8 @@ class EagerAllMcp(_Base):
     """A1/B1: every schema in context before turn 1."""
 
     name: str = "eager-all-mcp"
+    needs: frozenset[str] = frozenset({"executor_factory", "sandbox_env"})
+    slots: frozenset[str] = frozenset({"skill"})
 
     def supports(self, v: Variant) -> bool:
         return (v.transport is Transport.MCP
@@ -197,6 +224,8 @@ class MetaToolsMcp(_Base):
     """A2/B2/D3: a search/describe/invoke triad instead of every schema."""
 
     name: str = "meta-tools-mcp"
+    needs: frozenset[str] = frozenset({"executor_factory", "sandbox_env"})
+    slots: frozenset[str] = frozenset({"skill"})
 
     def supports(self, v: Variant) -> bool:
         return (v.transport is Transport.MCP
@@ -251,6 +280,8 @@ class CodeFsMcp(_Base):
     """
 
     name: str = "code-fs"
+    needs: frozenset[str] = frozenset({"sandbox_env"})
+    slots: frozenset[str] = frozenset({"skill", "helpers"})
 
     def supports(self, v: Variant) -> bool:
         return v.discovery is Discovery.CODE_FS and v.invocation is Invocation.CODE
@@ -297,6 +328,8 @@ class DocsShell(_Base):
     """
 
     name: str = "docs-shell"
+    needs: frozenset[str] = frozenset({"sandbox_env"})
+    slots: frozenset[str] = frozenset({"docs"})
 
     def supports(self, v: Variant) -> bool:
         return v.transport is Transport.HTTP_REST and v.invocation is Invocation.SHELL
@@ -339,6 +372,8 @@ class RetrievalMcp(_Base):
 
     name: str = "retrieval-mcp"
     k: int = 5
+    needs: frozenset[str] = frozenset({"executor_factory", "sandbox_env"})
+    slots: frozenset[str] = frozenset({"skill"})
 
     def supports(self, v: Variant) -> bool:
         return (v.transport is Transport.MCP
@@ -416,6 +451,7 @@ class GoldPreExecuted(_Base):
     name: str = "z1-pre-executed"
     #: Rendered results of the gold sequence, injected per task by the runner.
     prefetched: str = ""
+    needs: frozenset[str] = frozenset({"prefetch"})
 
     def supports(self, v: Variant) -> bool:
         return v.transport is Transport.IN_PROCESS
@@ -476,12 +512,28 @@ def _authored_commit(v: Variant) -> str | None:
         return "uncommitted"
 
 
-def register_defaults(make_mcp_executor: ExecutorFactory) -> None:
-    """Register the built-in methods. Called once by the runner."""
-    register(EagerAllMcp(make_executor=make_mcp_executor))
-    register(MetaToolsMcp(make_executor=make_mcp_executor))
-    register(RetrievalMcp(make_executor=make_mcp_executor))
+def register_defaults(make_mcp_executor: ExecutorFactory | None = None) -> None:
+    """Register unbound prototypes. Idempotent.
+
+    Binding (``make_executor``, ``env``, ``prefetched``) happens per run via
+    ``PackagingMethod.bind`` — the registry holds capability declarations, not
+    a transport. ``make_mcp_executor`` is accepted for older call sites and
+    ignored: a factory baked into the registry would pin every concurrent run
+    to one target.
+    """
+    del make_mcp_executor  # legacy kw; binding is per-run now
+    if registered():
+        return
+    register(EagerAllMcp())
+    register(MetaToolsMcp())
+    register(RetrievalMcp())
     register(CodeFsMcp())
     register(DocsShell())
     register(NoTools())
     register(GoldPreExecuted())
+
+
+def reset_defaults(make_mcp_executor: ExecutorFactory | None = None) -> None:
+    """Clear and re-register. Tests only."""
+    clear_registry()
+    register_defaults(make_mcp_executor)

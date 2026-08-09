@@ -30,13 +30,13 @@ from . import __version__
 from .engine import lint as lint_mod
 from .engine.analysis import RANK_KEYS as _RANK_KEYS
 from .engine.axes import (
-    Caching, DocBudget, ErrorDetail, McpRevision, ResponseShape, SchemaDetail,
-    preset,
+    Caching, ConfigError, DocBudget, ErrorDetail, McpRevision, ResponseShape,
+    SchemaDetail, preset,
 )
 from .engine.compute import compute, report_footer
 from .engine.generate import load_spec
 from .engine.loop import AgentRunner
-from .engine.methods import CodeFsMcp, DocsShell, EagerAllMcp, MetaToolsMcp, NoTools
+from .engine.methods import register_defaults
 from .engine.packaging import resolve
 from .engine.planner import load_plan
 from .engine.provider import ProviderConfig
@@ -66,14 +66,6 @@ def _operator_errors() -> tuple[type[BaseException], ...]:
 
     return (ConfigError, UnknownModel, PackError, PackTargetError)
 
-
-_METHODS = {
-    "A1": EagerAllMcp, "B1": EagerAllMcp,
-    "A2": MetaToolsMcp, "B2": MetaToolsMcp, "D3": MetaToolsMcp,
-    "D1": CodeFsMcp, "D2": CodeFsMcp,
-    "C1": DocsShell, "C2": DocsShell,
-    "Z0": NoTools,
-}
 
 DEFAULT_PROBE_PRESETS = ("Z0", "A1", "A2", "C1", "D1")
 
@@ -180,21 +172,46 @@ def _mcp_executor_factory(pack, revision):
     return make
 
 
-def _build_method(name: str, make_executor, spec):
-    """A packaging method wired to the live target."""
+def _bind_field_method(variant, task, make_executor, spec):
+    """Wire a packaging method to a live target by axis match, not by name.
+
+    Fail closed: an unknown arm raises ``ConfigError`` from ``preset()``
+    before we get here; an unsupported axis corner raises from ``resolve``.
+    There is no EagerAllMcp fallback — that is what silently dropped the
+    skill condition on probe's B1/B2.
+    """
+    from .engine.axes import Discovery, Invocation
     from .engine.dispatch import MetaToolDispatcher
 
-    cls = _METHODS.get(name, EagerAllMcp)
-    if cls is NoTools:
-        return cls()
-    if cls is MetaToolsMcp:
-        # The triad dispatches onto the same executor eager-all uses, so the
-        # arms differ in discovery and nothing else.
-        return cls(make_executor=lambda materials, _v=None:
-                   MetaToolDispatcher(spec, make_executor(materials, None)))
-    if cls in (CodeFsMcp, DocsShell):
-        return cls()
-    return cls(make_executor=make_executor)
+    register_defaults()
+    method = resolve(variant)
+    kwargs: dict[str, Any] = {}
+    if "prefetch" in method.needs:
+        # Field targets have no gold sequence to pre-execute. Binding an empty
+        # prefetch lets materialize succeed; the matrix preflight drops the
+        # arm when the target cannot supply real gold responses.
+        gold = getattr(task, "gold_call_sequence", None) if task else None
+        kwargs["prefetched"] = "" if not gold else ""
+    if "sandbox_env" in method.needs:
+        kwargs["env"] = None  # sandbox reads TARGET_BASE_URL from os.environ
+    if "executor_factory" in method.needs:
+        if make_executor is None:
+            raise ConfigError(
+                f"arm {variant.preset!r} needs an MCP executor but the pack "
+                f"has no api.mcp — cannot bind {method.name}"
+            )
+        if (variant.discovery is Discovery.META_TOOLS
+                and variant.invocation is Invocation.TOOL_CALL):
+            # The triad dispatches onto the same executor eager-all uses, so
+            # the arms differ in discovery and nothing else.
+            kwargs["make_executor"] = (
+                lambda materials, _v=None: MetaToolDispatcher(
+                    spec, make_executor(materials, None)
+                )
+            )
+        else:
+            kwargs["make_executor"] = make_executor
+    return method.bind(**kwargs)
 
 
 def _apply_smoke_profile(args: argparse.Namespace) -> None:
@@ -271,10 +288,9 @@ def _field_target(args: argparse.Namespace, pack):
     make_executor = _mcp_executor_factory(pack, revision)
     target = FieldTarget(
         pack=pack, spec=spec,
-        # Built WITH the transport factory. Registering it globally was not
-        # enough: method_for was constructing fresh instances that had no way
-        # to reach the server.
-        method_for=lambda name: _build_method(name, make_executor, spec),
+        bind_method=lambda variant, task: _bind_field_method(
+            variant, task, make_executor, spec
+        ),
     )
     return target, revision
 
@@ -284,6 +300,46 @@ class PackTargetError(Exception):
 
 
 # ---- planning ------------------------------------------------------------
+
+def cmd_arms(args: argparse.Namespace) -> int:
+    """List resolved arms with derived names — no hand-written blurbs."""
+    from .engine.axes import (
+        Caching, DocBudget, ErrorDetail, McpRevision, ResponseShape,
+        SchemaDetail, describe, preset, short_name,
+    )
+    from .engine.methods import register_defaults
+    from .engine.packaging import resolve
+
+    register_defaults()
+    if args.plan:
+        plan = load_plan(args.plan)
+        names = plan.presets
+        base = plan.base
+    else:
+        from .engine.axes import builtin_arm_names
+        names = builtin_arm_names()
+        base = dict(
+            schema_detail=SchemaDetail.STANDARD,
+            response_shape=ResponseShape.AS_IS,
+            error_detail=ErrorDetail.FIELD_SCOPED,
+            doc_budget=DocBudget.STANDARD, surface_size=0,
+            model="?", reasoning_effort="low", temperature=0.0,
+            caching=Caching.OFF, repeats=1,
+            mcp_revision=McpRevision.R2026_07_28,
+        )
+    # Coerce YAML strings in plan.base.
+    from .engine.axes import axis_by_name, coerce_axis_value
+    typed = {}
+    for k, v in base.items():
+        typed[k] = coerce_axis_value(k, v) if axis_by_name(k) else v
+
+    for name in names:
+        variant = preset(name, **typed)
+        method = resolve(variant)
+        print(f"{name:<12} {method.name:<18} {short_name(variant)}")
+        print(f"{'':12} {describe(variant)}")
+    return 0
+
 
 def cmd_plan(args: argparse.Namespace) -> int:
     plan = load_plan(args.plan)
@@ -295,15 +351,92 @@ def cmd_plan(args: argparse.Namespace) -> int:
     estimate = plan.estimate(get_provider(args.provider))
 
     print(f"{plan.id}\n  {plan.rationale.strip()}\n")
-    print(estimate.render())
+    if getattr(args, "explain", False):
+        print(_explain_plan(plan, estimate))
+    else:
+        print(estimate.render())
+    if plan.max_usd is not None and estimate.projected_usd > plan.max_usd:
+        print(f"\nrefuses budget.max_usd=${plan.max_usd:,.2f}: "
+              f"projection ${estimate.projected_usd:,.2f}. Cut arms, cores, "
+              f"or repeats — cheapest cut is usually dropping an exploratory arm.")
 
     if args.approve:
         if not _confirm():
             print("\nnot approved")
             return 1
-        plan.approve(estimate)
-        print("\napproved for this matrix size")
+        plan.approve(estimate, persist=True)
+        print(f"\napproved for this matrix size "
+              f"(digest {plan.digest()}, {estimate.runs} runs)")
     return 0
+
+
+def _explain_plan(plan, estimate) -> str:
+    lines = [
+        f"  arms:      {len(plan.presets)} ({', '.join(plan.presets)})",
+        f"  tasks:     {plan.task_count}"
+        + (f"  via {plan.tasks}" if plan.tasks else ""),
+        f"  sweep:     {plan.sweep or '(none)'}",
+        f"  budget:    {plan.budget or '(none)'}",
+        f"  digest:    {plan.digest()}",
+        "",
+        estimate.render(),
+    ]
+    return "\n".join(lines)
+
+
+def _apply_plan(args: argparse.Namespace) -> None:
+    """Overlay a run plan onto argparse defaults. Flags already set win."""
+    if not getattr(args, "plan", None):
+        return
+    plan = load_plan(args.plan)
+    args.plan_id = plan.id
+    # Only fill fields the operator did not set on the CLI. argparse defaults
+    # look like "set", so we key off a small set of sentinel defaults.
+    if not args.presets:
+        args.presets = list(plan.presets)
+    if args.id in ("phase-0", None):
+        args.id = plan.id
+    base = plan.base
+    for flag, key in (
+        ("model", "model"), ("reasoning_effort", "reasoning_effort"),
+        ("temperature", "temperature"), ("caching", "caching"),
+        ("repeats", "repeats"), ("surface_size", "surface_size"),
+        ("schema_detail", "schema_detail"), ("response_shape", "response_shape"),
+        ("error_detail", "error_detail"), ("doc_budget", "doc_budget"),
+        ("mcp_revision", "mcp_revision"),
+    ):
+        if key in base and _is_cli_default(args, flag):
+            val = base[key]
+            setattr(args, flag, getattr(val, "value", val))
+    gen = (plan.tasks or {}).get("generate") or {}
+    if gen:
+        if _is_cli_default(args, "cores") and "cores" in gen:
+            args.cores = int(gen["cores"])
+        if _is_cli_default(args, "seed") and "seed" in gen:
+            args.seed = int(gen["seed"])
+        if _is_cli_default(args, "fan_out") and "fan_out" in gen:
+            args.fan_out = int(gen["fan_out"])
+        if _is_cli_default(args, "difficulty") and "difficulty" in gen:
+            args.difficulty = str(gen["difficulty"])
+    pack = (plan.tasks or {}).get("pack")
+    if pack and not args.pack:
+        args.pack = Path(pack)
+    if plan.sweep.get("error_detail") and not args.sweep_error_detail:
+        args.sweep_error_detail = list(plan.sweep["error_detail"])
+    args._plan = plan  # consulted for approval / budget
+
+
+def _is_cli_default(args: argparse.Namespace, flag: str) -> bool:
+    """Whether ``flag`` still holds the argparse default (plan may override)."""
+    defaults = {
+        "model": "gpt-5.6-luna", "reasoning_effort": "low", "temperature": 0.0,
+        "caching": "off", "repeats": 1, "surface_size": 0,
+        "schema_detail": "standard", "response_shape": "as-is",
+        "error_detail": "field-scoped", "doc_budget": "standard",
+        "mcp_revision": "2026-07-28", "cores": 3, "seed": 1, "fan_out": 8,
+        "difficulty": "standard",
+    }
+    return getattr(args, flag, None) == defaults.get(flag)
 
 
 def cmd_rig(args: argparse.Namespace) -> int:
@@ -527,6 +660,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         _apply_smoke_profile(args)
     if args.probe:
         _apply_probe_profile(args)
+    _apply_plan(args)
 
     # Priced before anything is created. `ResultStore.__init__` mkdirs, so
     # validating after it means a rejected run still leaves a results directory
@@ -558,6 +692,18 @@ def cmd_run(args: argparse.Namespace) -> int:
     # Each level is tagged onto the arm name so the report never averages
     # across it — that would answer the wrong question entirely.
     sweep_values = tuple(args.sweep_error_detail or ())
+    # Generalised --sweep AXIS=v1,v2 (and the legacy --sweep-error-detail alias).
+    sweep_axes = _parse_sweep_args(getattr(args, "sweep", None) or [],
+                                   sweep_values)
+    # Response-reshaping sweeps are a controlled-rig capability — a customer's
+    # API cannot be re-served three ways. Refuse rather than emit identical arms.
+    _FIELD_REFUSED_SWEEPS = frozenset({"error_detail", "response_shape"})
+    if args.pack and _FIELD_REFUSED_SWEEPS.intersection(sweep_axes):
+        bad = ", ".join(sorted(_FIELD_REFUSED_SWEEPS.intersection(sweep_axes)))
+        print(f"\nrefusing --sweep {bad} on a field pack: only the controlled "
+              f"rig can reshape responses. On a customer's API no axis that "
+              f"reshapes responses can be swept at all.", file=sys.stderr)
+        return 2
 
     # The one thing that differs between a controlled matrix and a field run:
     # where the calls land. Everything below this branch is identical for both,
@@ -606,22 +752,27 @@ def cmd_run(args: argparse.Namespace) -> int:
                   f"a fresh matrix in a new --out.")
             return _EXIT_REFUSED
 
-    arm_specs = (
-        [(f"{a}@{v}", a, {"error_detail": ErrorDetail(v)}) for a in presets
-         for v in sweep_values]
-        if sweep_values else [(a, a, {}) for a in presets]
-    )
+    arm_specs = _expand_arm_specs(presets, sweep_axes)
+    axes = {**_base_axes(args), "surface_size": args.surface_size}
+
+    # Layer 1 (config): resolve every arm, validate every Variant, materialize
+    # once per arm — before the budget prompt. A missing authored skill used to
+    # raise mid-matrix after money was spent.
+    try:
+        resolved_arms = _preflight_arms(arm_specs, axes, target)
+    except (ConfigError, LookupError, FileNotFoundError, ValueError) as e:
+        print(f"\nrefusing to start: {e}", file=sys.stderr)
+        return 2
+
     planned = [
         (label, arm, overrides, task, repeat)
         for label, arm, overrides in arm_specs
         for task in tasks
         for repeat in range(args.repeats)
         if (label, task.id, repeat) not in done
-        # Z1 pre-executes reads and hands them over; it has no tools, so it can
-        # never complete a write. Running it on write tasks would spend money to
-        # record a guaranteed 0% and drag its ceiling down with it — the ceiling
-        # is only defined for synthesis.
-        and not (arm == "Z1" and str(task.task_class) != "R")
+        # Methods that need prefetch (Z1) only run on tasks with a gold
+        # sequence — axis-derived, not a hardcoded arm name. Writes have none.
+        and not _skip_for_needs(resolved_arms[label], task)
     ]
     if done:
         print(f"resuming: {len(done)} runs already on disk, {len(planned)} to go")
@@ -632,6 +783,12 @@ def cmd_run(args: argparse.Namespace) -> int:
                                      output_tokens=1_500).total_usd
     print(f"{len(planned)} runs — {len(presets)} arms x {len(tasks)} tasks "
           f"x {args.repeats} repeats. Rough projection ${rough:,.2f}")
+    plan = getattr(args, "_plan", None)
+    if plan is not None and plan.max_usd is not None and rough > plan.max_usd:
+        print(f"\nrefusing to start: projection ${rough:,.2f} exceeds "
+              f"budget.max_usd=${plan.max_usd:,.2f}. Cut the matrix or raise "
+              f"the cap.", file=sys.stderr)
+        return 2
     if (short := _disk_shortfall(store, len(planned))) is not None:
         need, free = short
         print(f"\nnot enough disk: {len(planned)} runs need ~{need / 2**30:.1f} GB "
@@ -668,12 +825,12 @@ def cmd_run(args: argparse.Namespace) -> int:
         schema_detail=args.schema_detail, response_shape=args.response_shape,
         error_detail=args.error_detail, doc_budget=args.doc_budget,
         mcp_revision=args.mcp_revision,
-        sweep_error_detail=list(sweep_values),
+        sweep_error_detail=list(sweep_axes.get("error_detail", ())),
         classes=list(args.classes or []), max_tasks=args.max_tasks,
         pack_digest=_pack_digest(tasks),
+        **_manifest_arm_fields(resolved_arms, args),
     )
 
-    axes = {**_base_axes(args), "surface_size": args.surface_size}
     config = ProviderConfig(
         model=args.model, reasoning_effort=args.reasoning_effort,
         temperature=args.temperature, max_turns=args.max_turns,
@@ -806,6 +963,8 @@ def _build_report(store, *, mde_pp: float | None = None,
     engine must not import it (plan.md §2).
     """
     from .engine.analysis import Report
+    from .engine.ops import build_ledger
+    from .engine.results import TRACES
 
     manifest = store.manifest()
     if mde_pp is None and manifest.get("cores"):
@@ -815,8 +974,60 @@ def _build_report(store, *, mde_pp: float | None = None,
                              repeats=int(manifest.get("repeats", 1))).mde_pp
         except Exception:  # noqa: BLE001 — a missing MDE only drops one banner
             mde_pp = None
-    return Report(rows=list(store.rows()), manifest=manifest, mde_pp=mde_pp,
-                  weights=weights)
+    rows = list(store.rows())
+    ledger = None
+    traces = store.root / TRACES
+    if traces.is_dir() and any(traces.iterdir()):
+        try:
+            ledger = build_ledger(
+                rows, traces,
+                gold_by_task=_gold_by_task_for_report(manifest, rows),
+            )
+        except Exception:  # noqa: BLE001 — a missing ledger must not kill report
+            ledger = None
+    return Report(rows=rows, manifest=manifest, mde_pp=mde_pp,
+                  weights=weights, op_ledger=ledger)
+
+
+def _gold_by_task_for_report(manifest: dict, rows: list) -> dict[str, tuple[str, ...]]:
+    """Rebuild gold op ids for the op ledger without changing results.jsonl.
+
+    Controlled runs regenerate the pack from the manifest's world parameters.
+    Field packs often have no gold — the ledger then marks off-gold / excess
+    unavailable rather than pretending they are zero. Row-level ``gold_ops``
+    (tests) still win via ``build_ledger``'s merge.
+    """
+    from .engine.ops import (
+        augment_gold_for_controlled_tasks, gold_ops_from_sequence,
+    )
+
+    if manifest.get("seed") is None or not manifest.get("cores"):
+        return {}
+    try:
+        from .experiment.domain import WorldShape, build_world, shape_for_cores
+        from .experiment.tasks import build_pack
+        from .engine.taskpack import TaskPack
+
+        shape = shape_for_cores(
+            int(manifest["cores"]),
+            WorldShape(episodes_per_season=int(manifest.get("fan_out", 8))),
+        )
+        raw = build_pack(
+            build_world(int(manifest["seed"]), shape),
+            cores=int(manifest["cores"]),
+            seed=int(manifest["seed"]),
+            difficulty=str(manifest.get("difficulty", "standard")),
+        )
+        pack = TaskPack.parse(raw)
+    except Exception:  # noqa: BLE001 — field dirs / old manifests
+        return {}
+    gold = {
+        t.id: gold_ops_from_sequence(t.gold_call_sequence)
+        for t in pack.tasks
+        if t.gold_call_sequence
+    }
+    # Navigation gold alone marks every required write as off-path; augment.
+    return augment_gold_for_controlled_tasks(gold)
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -1159,6 +1370,129 @@ def cmd_compare(args: argparse.Namespace) -> int:
     return 0
 
 
+def _manifest_arm_fields(resolved_arms: dict[str, Any],
+                         args: argparse.Namespace) -> dict[str, Any]:
+    """Per-arm definition table + digests for ``harness compare``.
+
+    Once arms are user-definable, ``A1`` in one run may not be ``A1`` in
+    another. Hashing axes (and later materials) is what makes that visible
+    instead of a silent wrong comparison.
+    """
+    import hashlib
+
+    from .engine.axes import axis_summary, split_label
+
+    arms_table: dict[str, Any] = {}
+    for label, (variant, method) in resolved_arms.items():
+        base, sweep = split_label(label)
+        entry = axis_summary(variant)
+        entry.update({
+            "preset": base,
+            "method": method.name,
+            "sweep": sweep,
+            "materials": {},  # filled when materials land on ArmDef
+            "family": getattr(args, "family", None),
+        })
+        arms_table[label] = entry
+    digest_src = json.dumps(arms_table, sort_keys=True, default=str).encode()
+    fields: dict[str, Any] = {
+        "arms": arms_table,
+        "arms_digest": hashlib.sha256(digest_src).hexdigest()[:16],
+        "excluded_arms": {},
+    }
+    if getattr(args, "plan", None):
+        plan_path = str(args.plan)
+        fields["plan_path"] = plan_path
+        fields["plan_id"] = getattr(args, "plan_id", None)
+        try:
+            payload = Path(plan_path).read_bytes()
+            fields["plan_digest"] = hashlib.sha256(payload).hexdigest()[:16]
+        except OSError:
+            fields["plan_digest"] = None
+    return fields
+
+
+def _parse_sweep_args(sweep_flags: list[str],
+                      legacy_error_detail: tuple[str, ...]) -> dict[str, tuple]:
+    """Merge ``--sweep AXIS=v1,v2`` flags and the legacy error_detail alias."""
+    from .engine.axes import axis_by_name, coerce_axis_value
+
+    out: dict[str, tuple] = {}
+    if legacy_error_detail:
+        out["error_detail"] = tuple(legacy_error_detail)
+    for flag in sweep_flags:
+        if "=" not in flag:
+            raise ConfigError(
+                f"--sweep {flag!r}: expected AXIS=v1,v2"
+            )
+        axis, _, values = flag.partition("=")
+        axis = axis.strip()
+        if axis_by_name(axis) is None:
+            raise ConfigError(f"--sweep: unknown axis {axis!r}")
+        levels = tuple(v.strip() for v in values.split(",") if v.strip())
+        # Validate by coercing.
+        for level in levels:
+            coerce_axis_value(axis, level)
+        out[axis] = levels
+    return out
+
+
+def _expand_arm_specs(presets: tuple[str, ...],
+                      sweep_axes: dict[str, tuple]) -> list[tuple]:
+    """Cartesian product of presets × sweep levels → (label, base, overrides)."""
+    import itertools
+
+    from .engine.axes import coerce_axis_value, format_label
+
+    if not sweep_axes:
+        return [(a, a, {}) for a in presets]
+    axes = list(sweep_axes)
+    levels = [sweep_axes[a] for a in axes]
+    specs = []
+    for arm in presets:
+        for combo in itertools.product(*levels):
+            overrides = {
+                axis: coerce_axis_value(axis, value)
+                for axis, value in zip(axes, combo)
+            }
+            label = format_label(
+                arm,
+                {axis: str(getattr(v, "value", v)) for axis, v in overrides.items()},
+                axis_order=tuple(axes),
+            )
+            specs.append((label, arm, overrides))
+    return specs
+
+
+def _preflight_arms(arm_specs, axes: dict, target) -> dict[str, Any]:
+    """Resolve every arm and materialize once before the budget prompt.
+
+    Layer 1 of the infra taxonomy: config errors refuse to start. A missing
+    authored skill, an unknown preset, or an ambiguous ``supports()`` must not
+    surface mid-matrix after money is spent.
+    """
+    register_defaults()
+    resolved: dict[str, Any] = {}
+    for label, arm, overrides in arm_specs:
+        variant = preset(arm, **{**axes, **overrides})
+        method = resolve(variant)
+        method.materialize(target.spec, variant)
+        resolved[label] = (variant, method)
+    return resolved
+
+
+def _skip_for_needs(resolved_entry, task) -> bool:
+    """Drop cells a method cannot grade, derived from ``needs`` not arm name.
+
+    Prefetch methods (Z1) only run on tasks that carry a gold call sequence —
+    writes never do, and spending on a guaranteed 0% would drag the ceiling.
+    """
+    _variant, method = resolved_entry
+    if "prefetch" in method.needs and not getattr(task, "gold_call_sequence", None):
+        return True
+    return False
+
+
 def _progress(done: int, total: int, started_at: float) -> str:
     """`[ 42/270  16%  eta 21m]` — position, share, and time remaining.
 
@@ -1228,6 +1562,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_p = sub.add_parser("run", help="run the controlled rig; persists everything")
     run_p.add_argument("--out", default="results", help="results directory")
     run_p.add_argument("--id", default="phase-0", help="label for this matrix")
+    run_p.add_argument("--plan", type=Path,
+                       help="run plan YAML; flags override the plan, plan "
+                            "overrides defaults. Not required — today's flags "
+                            "are an implicit plan")
     run_p.add_argument("--presets", nargs="*",
                        help="arms to run (default: Z0 A1 A2 C1 D1)")
     run_p.add_argument("--cores", type=int, default=3)
@@ -1239,9 +1577,13 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--seed", type=int, default=1)
     run_p.add_argument("--sweep-error-detail", nargs="*",
                        choices=[e.value for e in ErrorDetail],
-                       help="run every arm once per error_detail level. Answers: "
-                            "is fixing your error messages cheaper than shipping "
-                            "a skill?")
+                       help="alias for --sweep error_detail=v1,v2,… "
+                            "(deprecated name; kept for existing scripts)")
+    run_p.add_argument("--sweep", action="append", default=[],
+                       metavar="AXIS=v1,v2",
+                       help="cartesian sweep over an axis "
+                            "(repeatable). Example: --sweep error_detail=terse,"
+                            "field-scoped")
     run_p.add_argument("--difficulty", default="standard",
                        choices=["standard", "hard"],
                        help="'standard' ceilinged at ~100%% for every arm; "
@@ -1369,9 +1711,16 @@ def build_parser() -> argparse.ArgumentParser:
                            "MCP envelopes, key/value args, highlight answers")
     tr_p.set_defaults(func=cmd_transcript)
 
+    arms_p = sub.add_parser("arms", help="list resolved arms (axes, method, description)")
+    arms_p.add_argument("--plan", type=Path,
+                        help="resolve arms for this plan's base + include")
+    arms_p.set_defaults(func=cmd_arms)
+
     plan_p = sub.add_parser("plan", help="cost projection and approval")
     plan_p.add_argument("plan", type=Path)
     plan_p.add_argument("--approve", action="store_true")
+    plan_p.add_argument("--explain", action="store_true",
+                        help="print the resolved matrix and per-arm summary")
     plan_p.add_argument("--strict", action="store_true",
                         help="require a pre-registered confirmatory/exploratory split")
     plan_p.set_defaults(func=cmd_plan)

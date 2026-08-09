@@ -67,8 +67,11 @@ class FieldTarget:
 
     pack: TaskPack
     spec: ApiSpec
-    #: name -> PackagingMethod, already bound to this target's transport.
-    method_for: Any
+    #: variant -> PackagingMethod, bound to this target's transport via
+    #: ``resolve`` + ``needs``. Receives the variant so skill-bearing arms
+    #: (B1/B2) keep their instructions axis instead of falling through to a
+    #: name table that silently dropped them.
+    bind_method: Any
     #: Passed through to the agent loop; see `AgentRunner.on_turn`.
     on_turn: Any = None
 
@@ -82,9 +85,10 @@ class FieldTarget:
         *,
         trace_dir: str | None = None,
     ) -> tuple[Trace, GradeResult]:
+        del preset_name  # ledger label; method selection is by axes
         runner = AgentRunner(
             provider=provider,
-            method=self.method_for(preset_name),
+            method=self.bind_method(variant, task),
             spec=self.spec,
             variant=variant,
             config=config,
@@ -97,3 +101,6 @@ class FieldTarget:
         )
         trace = runner.run(task.id, task.prompt)
         return trace, grade(task, trace)
+
+
+PackTarget = FieldTarget

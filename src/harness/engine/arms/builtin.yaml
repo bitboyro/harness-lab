@@ -1,0 +1,35 @@
+schema_version: 1
+
+# Structural axes only. Affordance and run axes come from the plan's `base`,
+# so a shipped arm never silently pins the model, the effort or the budget.
+# Flat on purpose — no `extends`. Editing one arm after results exist
+# invalidates the comparison it was used in; inheritance would make that
+# edit silent. Cheap repetition beats invisible coupling here.
+arms:
+  # ---- controls ---------------------------------------------------------
+  Z0:      {transport: none,       discovery: none,       invocation: none,      instructions: none,                        confirmation: none}
+  Z1:      {transport: in-process, discovery: none,       invocation: none,      instructions: none,                        confirmation: none}
+
+  # ---- A · MCP tool calls, no instructions ------------------------------
+  A1:      {transport: mcp,        discovery: eager-all,  invocation: tool-call, instructions: none,                        confirmation: none}
+  A2:      {transport: mcp,        discovery: meta-tools, invocation: tool-call, instructions: none,                        confirmation: none}
+
+  # ---- B · A plus a skill -----------------------------------------------
+  B1:      {transport: mcp,        discovery: eager-all,  invocation: tool-call, instructions: skill-generated-flat,        confirmation: none}
+  B2:      {transport: mcp,        discovery: meta-tools, invocation: tool-call, instructions: skill-generated-flat,        confirmation: none}
+  B1-auth: {transport: mcp,        discovery: eager-all,  invocation: tool-call, instructions: skill-authored-flat,         confirmation: none}
+  B2-auth: {transport: mcp,        discovery: meta-tools, invocation: tool-call, instructions: skill-authored-flat,         confirmation: none}
+
+  # ---- C · bash and curl ------------------------------------------------
+  C1:      {transport: http-rest,  discovery: docs,       invocation: shell,     instructions: docs-flat,                   confirmation: none}
+  C2:      {transport: http-rest,  discovery: docs,       invocation: shell,     instructions: docs-progressive,            confirmation: none}
+
+  # ---- D · code sandbox -------------------------------------------------
+  D1:      {transport: mcp,        discovery: code-fs,    invocation: code,      instructions: none,                        confirmation: none}
+  D2:      {transport: mcp,        discovery: code-fs,    invocation: code,      instructions: skill-generated-progressive, confirmation: none}
+  D2-auth: {transport: mcp,        discovery: code-fs,    invocation: code,      instructions: skill-authored-progressive,  confirmation: none}
+  D3:      {transport: mcp,        discovery: meta-tools, invocation: code,      instructions: skill-generated-flat,        confirmation: none}
+
+  # ---- unlisted in the recommended matrix -------------------------------
+  E1:      {transport: mcp,        discovery: retrieval,  invocation: tool-call, instructions: none,                        confirmation: none}
+  M1:      {transport: mcp,        discovery: eager-all,  invocation: tool-call, instructions: none,                        confirmation: mrtr, mcp_revision: "2026-07-28"}
