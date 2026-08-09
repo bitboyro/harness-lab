@@ -102,6 +102,28 @@ packaging deltas. Without gold paths in the pack, excess and off-gold stay
 marked unavailable — not zero. Details and interpretation guards live in
 reading-results under “Operation ledger”.
 
+## 5. Compare two targets without re-running a joint matrix
+
+When the independent variable is the server itself — MCP v1 vs v2, staging vs
+a candidate, two deployments of the same pack — run each once, then aggregate
+with `harness compare`. It re-analyses both ledgers; it does not diff rendered
+reports, and it does not merge rows into one results directory (that would
+silently drop colliding cells).
+
+```bash
+harness run --pack packs/api-mcp-v1.yaml --out results/mcp-v1 --id mcp-v1 \
+    --presets Z0 A1 C1 D1
+harness run --pack packs/api-mcp-v2.yaml --out results/mcp-v2 --id mcp-v2 \
+    --presets Z0 A1 C1 D1
+harness compare results/mcp-v1 results/mcp-v2 --label v1 --label v2 \
+    --html cmp.html
+```
+
+Each field run records `target`, `pack_name` and `pack_path` in its manifest
+(credentials stripped), so the parameter table names what changed. A differing
+target does not refuse pooling — that is the comparison. Pairing within core
+still requires the same task set (`pack_digest`).
+
 ## Safety
 
 Writes are **off** by default and should stay off until you have a staging

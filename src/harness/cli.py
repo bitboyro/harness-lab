@@ -96,6 +96,62 @@ def _pack_digest(tasks) -> str:
     return hashlib.sha256(payload).hexdigest()[:16]
 
 
+def _sanitize_target_url(value: str) -> str:
+    """Drop credentials from a target identity before it hits the manifest.
+
+    Published runs commit ``manifest.json``. A token in the query string or
+    userinfo would turn a shareable artifact into a leaked key. Paths and
+    non-URL values pass through unchanged.
+    """
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(value)
+    if not parts.scheme or not parts.netloc:
+        return value
+    host = parts.hostname
+    if host is None:
+        # Malformed netloc — still drop query/fragment and anything before @.
+        return urlunsplit((parts.scheme, parts.netloc.rsplit("@", 1)[-1],
+                           parts.path, "", ""))
+    if ":" in host:
+        host = f"[{host}]"
+    netloc = f"{host}:{parts.port}" if parts.port is not None else host
+    return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
+
+
+def _resolve_pack_target(pack) -> str:
+    """The independent variable a field run was pointed at.
+
+    Preference matches how ``_field_target`` chooses a surface: the live MCP
+    URL, else the OpenAPI location, else whatever ``base_url_env`` names in
+    the environment. Credentials never leave this function.
+    """
+    if pack.api.mcp and pack.api.mcp.url:
+        return _sanitize_target_url(pack.api.mcp.url)
+    if pack.api.openapi:
+        return _sanitize_target_url(pack.api.openapi)
+    env_name = pack.api.base_url_env
+    if env_name:
+        raw = os.environ.get(env_name)
+        if raw:
+            return _sanitize_target_url(raw)
+        return env_name
+    return ""
+
+
+def _field_manifest_fields(pack, pack_path: str) -> dict[str, Any]:
+    """Identity of the pack/target under test, for ``harness compare``.
+
+    Omitted entirely on controlled runs — writing ``None`` would invent a
+    recorded value, and ``NOT_RECORDED`` is the honest read for a rig matrix.
+    """
+    return {
+        "pack_name": pack.pack.id,
+        "pack_path": pack_path,
+        "target": _resolve_pack_target(pack),
+    }
+
+
 def _base_axes(args: argparse.Namespace) -> dict:
     return dict(
         schema_detail=SchemaDetail(args.schema_detail),
@@ -828,6 +884,12 @@ def cmd_run(args: argparse.Namespace) -> int:
         sweep_error_detail=list(sweep_axes.get("error_detail", ())),
         classes=list(args.classes or []), max_tasks=args.max_tasks,
         pack_digest=_pack_digest(tasks),
+        # Field-only: which pack and which server produced these rows. Without
+        # them, two runs of the same tasks against MCP v1 and v2 look identical
+        # in the parameter table and the comparison attributes real deltas to
+        # nothing. Controlled runs omit the keys — absent, not None — so a rig
+        # matrix reads NOT_RECORDED rather than inventing a difference.
+        **(_field_manifest_fields(pack, str(args.pack)) if args.pack else {}),
         **_manifest_arm_fields(resolved_arms, args),
     )
 

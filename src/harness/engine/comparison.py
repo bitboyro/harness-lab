@@ -134,6 +134,19 @@ PARAMETERS: tuple[Parameter, ...] = (
               meaning="cells already on disk when the run started"),
     Parameter("excluded arms", "identity", manifest_key="excluded_arms",
               meaning="arms dropped at load with the reason"),
+    # ---- target ----
+    # Field mode's independent variable. pooling=False: comparing two targets
+    # is the primary use case, and refusing it would exit 3 on itself.
+    # world=False: the tasks are the same, so pairing within core stays valid
+    # (pack_digest already refuses when they differ). Parameter.world is not
+    # read today — pairing goes through stats.world_key — but the flag is set
+    # correctly so a later reader of the table is not lied to.
+    Parameter("target", "target", manifest_key="target",
+              meaning="the API under test (credentials stripped)"),
+    Parameter("pack name", "target", manifest_key="pack_name",
+              meaning="the pack's meta.id — joins runs to the pack that produced them"),
+    Parameter("pack path", "target", manifest_key="pack_path",
+              meaning="the --pack argument as given"),
     # ---- model ----
     Parameter("model", "model", manifest_key="model", row_key="model",
               pooling=True, meaning="the model under test"),

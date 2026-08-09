@@ -247,6 +247,90 @@ def test_every_manifest_key_cmd_run_writes_has_a_parameter_row() -> None:
     )
 
 
+def test_a_differing_target_is_named_but_does_not_refuse_pooling(
+        tmp_path: Path) -> None:
+    """Two field runs of the same tasks against different servers must compare.
+
+    Comparing targets is the point of the workflow; marking `target` as a
+    pooling boundary would exit 3 on the feature's own primary use case. The
+    tasks are identical, so pairing within core stays valid.
+    """
+    from harness.cli import main
+
+    digest = "same-tasks-digest"
+    a_rows = [row(arm="A1", outcome="pass", core_id=f"c{i}",
+                  task_id=f"c{i}-a", model="m") for i in range(4)]
+    b_rows = [row(arm="A1", outcome="fail", core_id=f"c{i}",
+                  task_id=f"c{i}-b", model="m") for i in range(4)]
+    shared = dict(model="m", pack_digest=digest, pack_name="api")
+    a = _ledger(tmp_path / "a", a_rows, id="a",
+                target="https://v1.example/mcp", pack_path="packs/v1.yaml",
+                **shared)
+    b = _ledger(tmp_path / "b", b_rows, id="b",
+                target="https://v2.example/mcp", pack_path="packs/v2.yaml",
+                **shared)
+    assert main(["compare", str(a), str(b)]) == 0
+
+    c = _cmp(
+        _run("a", a_rows, target="https://v1.example/mcp",
+             pack_name="api", pack_path="packs/v1.yaml", pack_digest=digest,
+             model="m"),
+        _run("b", b_rows, target="https://v2.example/mcp",
+             pack_name="api", pack_path="packs/v2.yaml", pack_digest=digest,
+             model="m"),
+    )
+    target = next(p for p in c.params if p.name == "target")
+    assert target.differs
+    assert not c.pooling_refused, [b.render() for b in c.pooling_breaks]
+    contrast = c.contrast_for("A1", "b")
+    assert contrast is not None and contrast.method == "paired-core"
+
+
+def test_a_target_url_is_stored_without_credentials(tmp_path: Path) -> None:
+    """A pack URL's userinfo and query must never reach manifest.json."""
+    from harness.cli import _field_manifest_fields
+    from harness.engine.taskpack import TaskPack
+
+    pack = TaskPack.parse({
+        "schema_version": 1,
+        "pack": {"id": "secret-api", "report_class": "field"},
+        "api": {
+            "mcp": {
+                "url": "https://user:s3cret@api.example/mcp?token=leak-me",
+            },
+        },
+        "tasks": [{"id": "t1", "prompt": "q", "class": "R"}],
+    })
+    fields = _field_manifest_fields(pack, "packs/secret.yaml")
+    store = ResultStore(tmp_path)
+    store.write_manifest(id="cred-check", **fields)
+    text = (tmp_path / "manifest.json").read_text()
+    assert "s3cret" not in text
+    assert "leak-me" not in text
+    assert "user:" not in text
+    assert "token=" not in text
+    assert fields["target"] == "https://api.example/mcp"
+    assert fields["pack_name"] == "secret-api"
+    assert fields["pack_path"] == "packs/secret.yaml"
+
+
+def test_a_controlled_run_has_no_target_parameter() -> None:
+    """Rig manifests omit the keys — absent, not None — so compare reads
+    NOT_RECORDED rather than inventing a difference between two controlled runs.
+    """
+    a = _run("a", rows_for("A1", passes=1), model="m", cores=4)
+    b = _run("b", rows_for("A1", passes=1), model="m", cores=4)
+    assert "target" not in a.report.manifest
+    assert "pack_name" not in a.report.manifest
+    assert "pack_path" not in a.report.manifest
+    c = _cmp(a, b)
+    for name in ("target", "pack name", "pack path"):
+        row = next(p for p in c.params if p.name == name)
+        assert row.values["a"] is NOT_RECORDED
+        assert row.values["b"] is NOT_RECORDED
+        assert not row.differs
+
+
 # ---- pooling -------------------------------------------------------------
 
 def test_a_differing_model_leads_with_a_stop_banner() -> None:
