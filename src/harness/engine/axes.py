@@ -451,28 +451,57 @@ def format_label(base: str, overrides: dict[str, str], *, axis_order: tuple[str,
 # refactor did not move a single arm.
 _PRESETS: dict[str, dict[str, Any]] | None = None
 _EXTRA_ARMS: dict[str, dict[str, Any]] = {}
+#: Material bindings (skill/helpers/docs/target) keyed by arm name. Kept
+#: beside the axes table rather than inside it — ``preset()`` still returns a
+#: Variant, and materials are artifacts, not axes.
+_BUILTIN_MATERIALS: dict[str, dict[str, str]] = {}
+_EXTRA_MATERIALS: dict[str, dict[str, str]] = {}
 
 
 def _ensure_presets() -> dict[str, dict[str, Any]]:
     global _PRESETS
     if _PRESETS is None:
-        from .armspec import arms_as_preset_dicts, load_arms
-        _PRESETS = arms_as_preset_dicts(load_arms())
+        from .armspec import load_arms
+        loaded = load_arms()
+        _PRESETS = {name: dict(arm.axes) for name, arm in loaded.items()}
+        _BUILTIN_MATERIALS.clear()
+        for name, arm in loaded.items():
+            if arm.materials:
+                _BUILTIN_MATERIALS[name] = dict(arm.materials)
     return {**_PRESETS, **_EXTRA_ARMS}
 
 
 def register_plan_arms(extra: dict[str, Any]) -> None:
-    """Merge plan-declared arms into the lookup used by ``preset()``."""
+    """Merge plan-declared arms into the lookup used by ``preset()``.
+
+    Axes and materials both stick. Dropping materials here was the silent
+    failure mode: a plan ``skill:`` binding parsed and validated, then the
+    run used the default skill resolution anyway.
+    """
     from .armspec import load_arms
-    global _EXTRA_ARMS
+    global _EXTRA_ARMS, _EXTRA_MATERIALS
     _ensure_presets()
     loaded = load_arms(extra=extra)
     builtin_names = set(_PRESETS or {})
-    _EXTRA_ARMS = {
-        name: dict(arm.axes)
-        for name, arm in loaded.items()
-        if name not in builtin_names or name in extra
-    }
+    _EXTRA_ARMS = {}
+    _EXTRA_MATERIALS = {}
+    for name, arm in loaded.items():
+        if name not in builtin_names or name in extra:
+            _EXTRA_ARMS[name] = dict(arm.axes)
+            if arm.materials:
+                _EXTRA_MATERIALS[name] = dict(arm.materials)
+
+
+def arm_materials(arm: str) -> dict[str, str]:
+    """Material bindings for an arm label (exact matrix cell, then base name)."""
+    _ensure_presets()
+    base, _ = split_label(arm)
+    for key in (arm, base):
+        if key in _EXTRA_MATERIALS:
+            return dict(_EXTRA_MATERIALS[key])
+        if key in _BUILTIN_MATERIALS:
+            return dict(_BUILTIN_MATERIALS[key])
+    return {}
 
 
 def builtin_arm_names() -> tuple[str, ...]:
@@ -513,11 +542,14 @@ def preset(name: str, **base: Any) -> Variant:
     """
     presets = _ensure_presets()
     base_name, label_overrides = split_label(name)
-    lookup = base_name if base_name in presets else name
+    # Prefer the exact label when it was registered (material-matrix cells
+    # live under the full ``Name@skill=…`` key). Fall back to the base so
+    # sweep labels like ``A1@error_detail=terse`` still resolve to A1's axes.
+    lookup = name if name in presets else base_name if base_name in presets else name
     if lookup not in presets:
         known = ", ".join(presets)
         raise ConfigError(f"unknown preset {name!r}; known: {known}")
-    fields = {**presets[lookup], **base, "preset": base_name}
+    fields = {**presets[lookup], **base, "preset": lookup}
     for axis, value in label_overrides.items():
         if axis_by_name(axis) is not None:
             fields[axis] = coerce_axis_value(axis, value)

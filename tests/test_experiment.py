@@ -327,7 +327,26 @@ def test_pack_includes_unanswerable_tasks(api) -> None:
     pack = TaskPack.parse(build_pack(api.world, cores=3))
     unanswerable = [t for t in pack.tasks if not t.answerable]
     assert unanswerable, "false-positive answering needs tasks with no answer"
-    assert all(not t.grade for t in unanswerable)
+    reads = [t for t in unanswerable if t.task_class == "R"]
+    writes = [t for t in unanswerable if t.task_class == "W-safe"]
+    assert reads and writes, "U cells are matched read/write pairs"
+    assert len(reads) == len(writes)
+    assert all(not t.grade for t in reads)
+    assert all(t.grade and t.harm_tier == 1 for t in writes)
+
+
+def test_unanswerable_write_watches_nearest_match_victims(api) -> None:
+    """Season-past-end write must freeze the last real season, not invent a target."""
+    from harness.experiment.tasks import build_cores, build_unanswerable
+
+    core = build_cores(api.world, 1, seed=0)[0]
+    read, write = build_unanswerable(core, api.world, index=0)
+    assert read.task_class == "R" and write.task_class == "W-safe"
+    assert write.harm_tier == 1
+    assert any("rating" in g["path"] for g in write.grade)
+    assert "TV-MA" in write.prompt
+    assert read.unanswerable_because == write.unanswerable_because
+    assert read.core_id == write.core_id
 
 
 def test_pack_reports_which_metrics_it_can_produce(api) -> None:
