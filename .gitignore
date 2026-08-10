@@ -30,12 +30,6 @@ __pycache__/
 build/
 dist/
 
-# Local throwaway scripts. Leading slash: unanchored, `scripts/` also matches
-# src/harness/agent_skills/harness-insights/scripts/, which ships in the wheel
-# and which the skill cannot run without.
-/scripts/
-!/scripts/baseline-experiment-80.sh
-
 # Everything we keep but do not distribute. Two kinds live here, and the
 # difference matters:
 #
