@@ -78,15 +78,30 @@ harness run --pack packs/my-api.yaml --probe \
 
 | Flag | Default | Notes |
 |---|---|---|
-| `--provider` | `openai` | Only `openai` is wired today |
+| `--provider` | `openai` | `openai`, `anthropic`, `gemini`; any other name is treated as OpenAI-compatible when `--base-url` is given |
+| `--base-url` | — | Endpoint for a self-hosted or gateway model (Cerebras, Groq, Together, Ollama, vLLM, LM Studio, …). Recorded so it is never mistaken for the vendor endpoint |
 | `--model` | `gpt-5.6-luna` | **Must** be priced — see below. Also available: `gpt-5.6-terra` / `gpt-5.6-sol` |
-| `--reasoning-effort` | `low` | Always sent explicitly |
+| `--reasoning-effort` | `low` | Always sent explicitly. On Anthropic/Gemini this maps to a thinking-token budget |
 | `--temperature` | `0.0` | Dropped if the model rejects it; omission recorded |
 | `--caching` | `off` | `on` or `list-cacheable` |
 | `--max-turns` | `12` | Hit = truncation, not wrong answer |
 | `--mcp-revision` | varies by command | `auto` / `2026-07-28` / `legacy`; never pool across revisions |
 
-Same `--model` / `--provider` pattern on `harness rig` for controlled/matrix runs.
+Same `--provider` / `--base-url` / `--model` pattern on `harness rig` for
+controlled/matrix runs. **Never pool across providers or models** — Claude,
+Gemini and GPT arms are separate measurements; `compare` refuses to average them.
+
+Provider SDKs ship with the install — nothing extra to add. Two families:
+
+- **OpenAI wire format** — `openai`, plus every compatible service via
+  `--provider <name> --base-url <url>` (Cerebras, Groq, Together, OpenRouter,
+  and local runners Ollama / llama.cpp / vLLM / LM Studio). A service-specific
+  key like `CEREBRAS_API_KEY` is used if set, else `OPENAI_API_KEY`.
+- **Native adapters** — `anthropic` (`ANTHROPIC_API_KEY`) and `gemini`
+  (`GEMINI_API_KEY` or `GOOGLE_API_KEY`).
+
+A run against a model with no price on record is still refused; supply a rate
+with `HARNESS_PRICE_*` (below).
 
 ### Pricing gate
 

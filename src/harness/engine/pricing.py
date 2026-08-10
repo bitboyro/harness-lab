@@ -134,8 +134,17 @@ class UnknownModel(KeyError):
     """No price on record. Never resolved by guessing."""
 
 
-def _env_key(model: str) -> str:
+def env_var_for(model: str) -> str:
+    """The ``HARNESS_PRICE_*`` variable that prices ``model`` without a code edit.
+
+    Public so the CLI can name it in the "unpriced, proceeding" notice — the one
+    place a reader learns how to supply a rate for a model not in the catalogue.
+    """
     return "HARNESS_PRICE_" + re.sub(r"[^A-Z0-9]", "_", model.upper())
+
+
+#: Internal alias kept for the existing call sites below.
+_env_key = env_var_for
 
 
 def lookup(model: str) -> ModelPricing:

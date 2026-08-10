@@ -404,7 +404,8 @@ def cmd_plan(args: argparse.Namespace) -> int:
         plan.require_preregistration()
 
     from .engine.providers import get as get_provider
-    estimate = plan.estimate(get_provider(args.provider))
+    estimate = plan.estimate(get_provider(args.provider,
+                                           base_url=getattr(args, "base_url", None)))
 
     print(f"{plan.id}\n  {plan.rationale.strip()}\n")
     if getattr(args, "explain", False):
@@ -619,7 +620,7 @@ def _preflight(provider, config) -> str | None:
 #: is deliberately absent — it changes how fast the remaining cells run, never
 #: what they measure — as are `id`, `out` and `yes`.
 _RESUME_INHERITED = (
-    "model", "provider", "reasoning_effort", "temperature", "caching",
+    "model", "provider", "base_url", "reasoning_effort", "temperature", "caching",
     "max_turns", "repeats", "seed", "cores", "fan_out", "surface_size",
     "difficulty", "schema_detail", "response_shape", "error_detail",
     "doc_budget", "mcp_revision", "presets", "sweep_error_detail",
@@ -721,7 +722,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     # Priced before anything is created. `ResultStore.__init__` mkdirs, so
     # validating after it means a rejected run still leaves a results directory
     # behind — and an empty `traces/` next to no ledger reads like a run that
-    # died rather than one that never started.
+    # died rather than one that never started. This also doubles as a free,
+    # offline guard that catches a mistyped or unpriced model before the first
+    # paid provider call.
     pricing = lookup(args.model)
 
     # The store is opened first because on a resume it, not argparse, decides
@@ -834,7 +837,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"resuming: {len(done)} runs already on disk, {len(planned)} to go")
 
     from .engine.providers import get as get_provider
-    provider = get_provider(args.provider)
+    provider = get_provider(args.provider, base_url=args.base_url)
     rough = len(planned) * price_run(pricing, input_tokens=8_000,
                                      output_tokens=1_500).total_usd
     print(f"{len(planned)} runs — {len(presets)} arms x {len(tasks)} tasks "
@@ -862,6 +865,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         # however long the first attempt ran.
         **({"created_at": prior["created_at"]} if "created_at" in prior else {}),
         id=args.id, model=args.model, provider=args.provider,
+        base_url=args.base_url,
         presets=list(presets), cores=args.cores, repeats=args.repeats,
         seed=args.seed, surface_size=args.surface_size, fan_out=args.fan_out,
         reasoning_effort=args.reasoning_effort, difficulty=args.difficulty,
@@ -1789,6 +1793,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     for sp in (plan_p, run_p):
         sp.add_argument("--provider", default="openai")
+        sp.add_argument("--base-url", default=None,
+                        help="endpoint for a self-hosted or gateway model. With "
+                             "an unknown --provider, the name is treated as an "
+                             "OpenAI-compatible service (Cerebras, Groq, Ollama, "
+                             "vLLM, …)")
         sp.add_argument("--model", default="gpt-5.6-luna")
         sp.add_argument("--reasoning-effort", default="low")
         sp.add_argument("--temperature", type=float, default=0.0)

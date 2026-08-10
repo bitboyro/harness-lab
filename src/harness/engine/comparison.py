@@ -152,6 +152,9 @@ PARAMETERS: tuple[Parameter, ...] = (
               pooling=True, meaning="the model under test"),
     Parameter("provider", "model", manifest_key="provider",
               meaning="which API served the model"),
+    Parameter("base url", "model", manifest_key="base_url",
+              meaning="the endpoint that served the model — a self-hosted or "
+                      "gateway server is a different measurement from the vendor"),
     Parameter("reasoning effort", "model", manifest_key="reasoning_effort",
               meaning="the model's thinking budget"),
     Parameter("temperature", "model", manifest_key="temperature",
