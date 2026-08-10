@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: pip install -e '.[dev,openai]'
+      - run: pip install -e '.[dev]'
       # No network and no API key. The suite is expected to run this way, and a
       # release that needs our credentials to verify is one only we can verify.
       - run: python -m pytest -q

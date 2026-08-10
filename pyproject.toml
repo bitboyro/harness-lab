@@ -5,15 +5,30 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "harness-lab"
 dynamic = ["version"]
-description = "Measures how packaging a REST API affects an LLM agent's ability to use it"
+description = "Benchmarks which kind of tooling agents use best: cheapest, most accurate, least destructive"
 requires-python = ">=3.11"
+# Provider SDKs ship in the core install, not behind extras: a plain install
+# must make every available provider usable with nothing further to do. The
+# engine still never imports them at module load (see providers/*, lazy `_sdk`),
+# so it stays offline and importable without a key — bundling the wheel does not
+# change that. One SDK covers a lot: every OpenAI-compatible backend (Cerebras,
+# Groq, Together, Ollama, vLLM, LM Studio, gateways) rides on `openai` + a base
+# URL. A genuinely different wire format (Gemini, Anthropic) adds its SDK here in
+# the same change that adds the adapter — never as an extra.
 dependencies = [
     "pydantic>=2.6",
     "pyyaml>=6.0",
+    "openai>=1.60",
+    "anthropic>=0.40",
+    "google-genai>=1.0",
 ]
 
 [project.optional-dependencies]
-openai = ["openai>=1.60"]
+# Kept as no-op aliases so `pip install '.[openai]'` (and friends) still
+# resolve; the provider SDKs are core dependencies now.
+openai = []
+anthropic = []
+gemini = []
 dev = [
     "pytest>=8.0",
 ]

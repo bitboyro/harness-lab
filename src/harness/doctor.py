@@ -105,9 +105,9 @@ def run() -> list[Check]:
         _import("yaml", required=True,
                 blocks="everything — task packs are YAML",
                 hint="pip install pyyaml>=6.0"),
-        _import("openai", required=False,
+        _import("openai", required=True,
                 blocks="any run that calls a model. `lint` still works",
-                hint="pip install 'harness-lab[openai]'"),
+                hint="reinstall harness-lab — the openai SDK ships by default"),
         _api_key(),
         _binary("curl", blocks="the C arms (docs + shell), which shell out to it"),
         _binary("git", blocks="authored-skill provenance — the -auth arms "

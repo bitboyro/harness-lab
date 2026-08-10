@@ -49,9 +49,11 @@ class OpenAIProvider:
             try:
                 from openai import OpenAI
             except ImportError as e:  # pragma: no cover
+                # A core dependency, so this only fires on a broken/partial
+                # install rather than a missing extra.
                 raise RuntimeError(
-                    "the openai package is not installed; run "
-                    "`pip install -e '.[openai]'`"
+                    "the openai package is missing — reinstall harness-lab "
+                    "(`pip install -e '.[dev]'`)"
                 ) from e
             key = os.environ.get(self.api_key_env)
             if not key:

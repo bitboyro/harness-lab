@@ -16,8 +16,13 @@ Runs cost real provider money. Every command that spends prints a projection and
 ## Setup and commands
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -e '.[dev,openai]'
+python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 ```
+
+> ⚠ AMENDED: provider SDKs ship in the core install now, not behind extras — a
+> plain install makes every available provider usable with nothing further to
+> do. The old `.[openai]` extra survives as a no-op alias. `[dev]` is only for
+> the test tooling.
 
 Credentials live in `.env` at the repo root (gitignored; `.env.example` is the template). Nothing needs exporting — `main()` loads `.env` and prints which names it found. Use `.venv/bin/harness` or activate the venv.
 

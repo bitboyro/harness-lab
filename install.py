@@ -232,8 +232,11 @@ def main(argv):
         say("        make one:   python3 -m venv .venv && . .venv/bin/activate")
         say("        or re-run:  python3 %s --user" % os.path.basename(__file__))
 
-    extras = "" if "--no-openai" in flags else "openai"
-    code = install(wheel, "--user" in flags, extras)
+    # No extras and no opt-out: the provider SDK is a core dependency, so a
+    # plain install makes every available provider usable with nothing further
+    # to do. There is deliberately no `--no-openai` — leaving it out could not
+    # actually exclude the SDK any more, only mislead.
+    code = install(wheel, "--user" in flags, extras="")
     if code != 0:
         return fail("pip failed with exit code %d (see its output above)." % code)
 
