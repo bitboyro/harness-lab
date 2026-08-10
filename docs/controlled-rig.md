@@ -126,6 +126,45 @@ none can be added after seeing them. See
 [examples/plan.yaml](../examples/plan.yaml); `--strict` refuses a plan whose
 confirmatory set does not match the one declared in code.
 
+## Declaring your own arm
+
+The sixteen shipped arms are a starting ladder, not the limit. A run plan may
+add its own under `arms:`, merged over the builtins:
+
+```yaml
+arms:
+  A1-mine:                              # A1, plus your own hand-written skill
+    extends: A1
+    instructions: skill-authored-flat
+    materials: {skill: skills/my-api.md}
+
+  A1-confirm:                           # A1, but the server asks before writes
+    extends: A1
+    confirmation: mrtr
+```
+
+`extends` copies the parent's axes and anything you name overrides it.
+`materials` binds a file to a slot — `skill`, `docs`, `helpers` or `target`.
+`matrix` sweeps one arm across several values, expanding into
+`A1-mine@schema_detail=minimal` and siblings.
+
+The loader refuses rather than guesses: an unknown key, an unknown parent and an
+unknown material slot are each a load error naming what would have been valid.
+Pinning an affordance or run axis needs `allow_run_axes: true`:
+
+```
+arm 'D2-terse' pins non-structural axis 'doc_budget'. Affordance/run axes
+belong on the plan's base (or set allow_run_axes: true for a deliberate pin).
+```
+
+That refusal is the point. An arm that quietly pinned `model` or
+`reasoning_effort` would benchmark those instead of packaging (V3), and the
+results would look like a packaging finding. Requiring the flag makes the pin a
+decision someone made on purpose.
+
+A declared arm still resolves its packaging method through `packaging.resolve`,
+so it can reach nothing a builtin cannot.
+
 ## Disk
 
 Traces are ~900 KB each, so the recommended matrix is several GB. `run` refuses

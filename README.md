@@ -1,14 +1,50 @@
 # harness-lab
 
-**Does the way you package your API change how well an AI agent can use it?**
+**Which kind of tooling do agents use best?**
 
-Same API, same tasks, same model — only the packaging changes: an MCP server, an
-MCP server plus a written skill, docs and `curl`, a code-execution sandbox. The
-harness runs an agent against each and reports which one it actually used
-better, and what that cost.
+Which packaging is most accurate? Which is cheapest? Which does the most damage?
+
+harness-lab answers by **experiment**. 
+
+Give an agent the same job several ways — an MCP server, an MCP server plus a written skill, docs and `curl`, a code sandbox, a code sandbox plus a skill and whatnot.
+Same tasks, same model; only the packaging changes.
+
+Then you can measure what the packaging is worth — tune it and repeat.
+
+Each way of packaging is an **arm**:
+
+| | | |
+|---|---|---|
+| `Z0` | No tools | control — what the model already knows without you |
+| `A1` | MCP, all tools | every operation schema loaded upfront |
+| `A2` | MCP, discovery | 3 meta-tools; schemas fetched on demand |
+| `B1` | MCP, all tools + skill | `A1` plus a written skill |
+| `C1` | Bash + docs | a written reference; the agent writes `curl` |
+| `D1` | Code sandbox | operations as an importable module tree |
+
+16 in all — `--presets` picks which ones run, and you can
+[declare your own](./docs/controlled-rig.md#declaring-your-own-arm).
+
+## Install
 
 ```bash
-harness lint --demo     # free, no API key, one second
+curl -fsSL -O https://raw.githubusercontent.com/bitboyro/harness-lab/main/install.py
+python3 -m venv .venv && . .venv/bin/activate
+python3 install.py --download
+harness doctor                 # same checks, any time after
+```
+
+That fetches the latest release wheel from GitHub and installs it. 
+
+The install itself needs no network, so this works airgapped. The zip is on the
+[releases page](https://github.com/bitboyro/harness-lab/releases) too.
+
+Needs Python 3.11+. Full options in [docs/install.md](./docs/install.md).
+
+Then, to see it do something — free, no API key, one second:
+
+```bash
+harness lint --demo
 ```
 
 ## Why run commands, when your agent can do it for you?
@@ -34,11 +70,6 @@ Three skills are installed, and your agent picks whichever fits:
 | **harness-field-pack** | "test *my* API" | Discovers your surface, drafts and fills a task pack, sets safety defaults, chooses arms and suite size |
 | **harness-insights** | "give me a brief" | Turns a finished results directory into a narrative `insights.html` |
 
-They know the parts that are easy to get wrong: never pooling incomparable
-runs, that a lead under the MDE is a tie, that a probe cannot crown a winner,
-and that spend needs your approval first. `harness init` also drops a
-`packs/template.yaml` to start from.
-
 Nothing here is agent-only. Every command below works on its own.
 
 ## Three steps, increasing in cost
@@ -51,7 +82,11 @@ Nothing here is agent-only. Every command below works on its own.
 
 Nothing spends without printing a projection and asking first.
 
-## Point it at your own API
+> The **D arms execute model-written Python** in a temp directory with **no
+> container isolation**. Run them somewhere you're comfortable with that;
+> `--presets` without `D1`/`D2` avoids it.
+
+## Point it at your own API or MCP server
 
 ```bash
 harness scaffold https://your-server/mcp -o packs/your-api.yaml   # drafts a pack
@@ -63,6 +98,10 @@ harness report results/… --html report.html
 `scaffold` writes one task stub per read operation, puts every operation it
 won't exercise into `forbidden_calls`, and leaves every task **ungraded on
 purpose** — a stub that asserted something plausible would look finished.
+
+Always keep `Z0`, the arm with no tools. On a real API it measures how much the
+model already knows about yours, and every other arm is read as lift over it —
+which turns contamination from a threat into a measurement.
 
 If you work with Claude Code or Cursor, `harness init --agent both` installs
 skills that know this whole workflow, so your agent can do it with you.
@@ -77,71 +116,21 @@ harness report results/auth-smoke            # the scorecard, the winner, the ti
 harness transcript results/auth-smoke/traces # what the agent actually did
 ```
 
-And during a run of your own:
+## The baseline experiment
 
-```bash
-harness run … --stream --concurrency 1     # every message, live
-harness transcript results/…/traces        # replay any run afterwards
-```
+A realistic media-catalog API with its own answer key, generated in process, so
+correctness and harm are fully gradeable. Full detail in
+[controlled-rig.md](./docs/controlled-rig.md).
 
-## What it refuses to tell you
+## It won't oversell the result
 
-The useful part of this tool is mostly what it declines to say.
+The numbers are deliberately cautious. If one arm wins by less than the run is
+precise enough to measure, that is reported as a **tie**, not a win — the gap is
+noise, and dressing it up as a finding would be the easiest way to mislead you.
+Results that aren't comparable are never averaged together, and every number
+says whether it has been validated.
 
-- It **never pools** results across models, MCP revisions, skill conditions, or
-  controlled-vs-field runs. `harness compare` exits 3 rather than print a
-  comparison that crosses one of those lines.
-- A lead smaller than the run's own minimum detectable effect is reported as a
-  **tie**, not a win — and "not detectable" is not "no difference".
-- Confirmatory contrasts are **declared in code before any matrix runs**, so
-  none can be added after seeing results.
-- Cost is **decomposed, never totalled**, because a single number hides the
-  mechanism the whole comparison is about.
-- Runs killed by a dead key, a full disk or a rate limit are **excluded from
-  every rate** and re-run, not counted as packaging failures.
-- Every metric prints whether it is `validated-controlled`, `unvalidated`, or
-  `heuristic`.
-
-**Today, 0 of 8 lint rules have a measured effect size**, and the lint footer
-says so on every run. They are hypotheses worth testing, not defects.
-
-## Two modes
-
-**Controlled** — a fictional media-catalog API generated in process from a seed,
-with an answer key from the same source of truth. Correctness and harm are
-properly gradeable, because the world and the answers come from the same place.
-
-**Field** — any real REST API or live MCP server, described by a task pack.
-Contamination is uncontrolled there, so every number is reported as lift over
-`Z0`, the arm with no tools at all. That turns "the model already knows your
-API" from a threat into a measurement.
-
-Both run through one command and one execution path. The difference is a
-*target*, not a second implementation.
-
-## Install
-
-Download one thing — `harness-lab-<version>.zip` — and unzip it. The wheel and
-the installer are both inside, so nothing is fetched and no credentials are
-needed:
-
-```bash
-python3 install.py --check     # what is missing, and what each thing blocks
-python3 install.py             # installs the wheel next to it
-harness doctor                 # same checks, any time after
-```
-
-Working from the repo instead, `python3 install.py --download` pulls the latest
-release wheel straight from GitHub. No credentials and no extra tooling.
-
-Two ways to run it and no third — `harness …` or `python3 -m harness …`.
-
-Needs Python 3.11+, plus `curl` for the shell arms. Full options, and a warning
-about the sandbox arms, in [docs/install.md](./docs/install.md).
-
-> The **D arms execute model-written Python** in a temp directory with **no
-> container isolation**. Run them somewhere you're comfortable with that;
-> `--presets` without `D1`/`D2` avoids it.
+More in [reading-results.md](./docs/reading-results.md).
 
 ## Docs
 
@@ -155,9 +144,6 @@ about the sandbox arms, in [docs/install.md](./docs/install.md).
 
 [CHANGELOG](./CHANGELOG.md)
 
-## Status
+## Feel free to contribute!
 
-Pre-1.0. The engine, both run modes, the lint and the reporting are built and
-tested; the controlled matrix has run at 40 cores. The lint rules are not yet
-backed by measured effect sizes, and field metrics are unvalidated. Both facts
-are printed on the artifacts rather than kept in a footnote.
+Issues and pull requests welcome.

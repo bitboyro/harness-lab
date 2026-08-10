@@ -1,16 +1,36 @@
 [build-system]
-requires = ["setuptools>=68"]
+# 77 is the floor for PEP 639 (`license` as an SPDX string + `license-files`).
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "harness-lab"
 dynamic = ["version"]
 description = "Measures how packaging a REST API affects an LLM agent's ability to use it"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Testing",
+]
 dependencies = [
     "pydantic>=2.6",
     "pyyaml>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/bitboyro/harness-lab"
+Repository = "https://github.com/bitboyro/harness-lab"
+Issues = "https://github.com/bitboyro/harness-lab/issues"
+Changelog = "https://github.com/bitboyro/harness-lab/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 openai = ["openai>=1.60"]

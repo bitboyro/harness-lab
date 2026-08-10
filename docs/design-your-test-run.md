@@ -19,7 +19,7 @@ It is frozen before the engine is written, deliberately. A format that changes a
 
 1. **Every field has exactly one defined consumer.** A field nothing reads is cut, not kept "for later". §3 is the audit.
 2. **Optional fields degrade gracefully.** A pack with only `api` and `tasks[].prompt` still runs — it yields gold-free metrics only (`assertion-free` mode, O6). Every additional field unlocks a specific metric, and the report says which metrics were unavailable and why.
-3. **Nothing in the pack names a variant.** A pack describes *the API and the tasks*, never how to package them. Packaging is the independent variable and lives in the run plan, selected with `--presets`.
+3. **Nothing in the pack names a variant.** A pack describes *the API and the tasks*, never how to package them. Packaging is the independent variable and lives in the run plan, selected with `--presets` — or declared there as [an arm of your own](./controlled-rig.md#declaring-your-own-arm).
 4. **Safety defaults are on.** Read-only unless writes are explicitly enabled; `forbidden_calls` enforced whenever present.
 
 ---
