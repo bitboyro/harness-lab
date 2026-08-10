@@ -34,8 +34,8 @@ SEQUENTIAL = ("#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5",
 #: ordered states, and the six-colour categorical set hard-failed all-pairs CVD
 #: (orange vs green, ΔE 3.2 protan) — a pair that genuinely appears side by side
 #: whenever an intermediate segment is zero.
-ORDINAL_LIGHT = ("#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281")
-ORDINAL_DARK = ("#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#184f95")
+ORDINAL_LIGHT = ("#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281", "#0a2f5c")
+ORDINAL_DARK = ("#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#184f95", "#0d3a6e")
 
 #: Truncation is not a grade — it is the absence of one. Carried by texture and
 #: a neutral fill rather than a position on the quality ramp, so it can never be
@@ -250,7 +250,7 @@ def bar_chart(bars: Sequence[Bar], *, title: str, unit: str = "%",
 _ON_FILL_INK = {
     "var(--ord-1)": "#0b0b0b", "var(--ord-2)": "#0b0b0b",
     "var(--ord-3)": "#ffffff", "var(--ord-4)": "#ffffff",
-    "var(--ord-5)": "#ffffff",
+    "var(--ord-5)": "#ffffff", "var(--ord-6)": "#ffffff",
     "var(--neutral)": "var(--text-primary)",
 }
 

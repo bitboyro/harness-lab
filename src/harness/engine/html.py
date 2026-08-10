@@ -22,7 +22,8 @@ from .svg import bar_chart, Bar, grouped_bars, heatmap, legend, palette_css, sca
 #: ramp entirely on a neutral fill: it is the absence of a grade, not a worse
 #: one, and colouring it as a severity step would misstate what happened.
 OUTCOME_FILLS = ("var(--ord-1)", "var(--ord-2)", "var(--ord-3)",
-                 "var(--ord-4)", "var(--ord-5)", "var(--neutral)")
+                 "var(--ord-4)", "var(--ord-5)", "var(--ord-6)",
+                 "var(--neutral)")
 
 _CSS = """
   * { box-sizing: border-box; }

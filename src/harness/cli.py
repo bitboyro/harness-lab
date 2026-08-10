@@ -1442,7 +1442,7 @@ def _manifest_arm_fields(resolved_arms: dict[str, Any],
     """
     import hashlib
 
-    from .engine.axes import axis_summary, split_label
+    from .engine.axes import arm_materials, axis_summary, split_label
 
     arms_table: dict[str, Any] = {}
     for label, (variant, method) in resolved_arms.items():
@@ -1452,7 +1452,7 @@ def _manifest_arm_fields(resolved_arms: dict[str, Any],
             "preset": base,
             "method": method.name,
             "sweep": sweep,
-            "materials": {},  # filled when materials land on ArmDef
+            "materials": arm_materials(label) or arm_materials(variant.preset),
             "family": getattr(args, "family", None),
         })
         arms_table[label] = entry

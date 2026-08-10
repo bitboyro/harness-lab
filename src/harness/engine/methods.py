@@ -50,10 +50,34 @@ def _instruction_block(spec: ApiSpec, variant: Variant) -> ContextBlock | None:
     Authored skills are read from disk rather than generated. They deliberately
     break V1, which is the point of the dual condition: the gap between the two
     is the measurement, and pooling them would erase it.
+
+    Plan material bindings must match the axis: ``materials.skill`` for skill
+    instructions, ``materials.docs`` for docs. A bound file wins over generated
+    content. Cross-slot bindings refuse rather than validate-and-silently-drop —
+    copying C1 and pointing ``materials.skill`` at a bait file used to ship the
+    curl reference unchanged.
     """
+    from .axes import arm_materials
+
     ins = variant.instructions
+    mats = arm_materials(variant.preset)
+    _refuse_cross_slot_materials(variant.preset, ins, mats)
+
     if ins is Instructions.NONE:
         return None
+
+    if ins in (Instructions.DOCS_FLAT, Instructions.DOCS_PROGRESSIVE):
+        bound = _bound_material(variant, "docs")
+        if bound is not None:
+            return ContextBlock(role="system", content=bound, label=str(ins))
+        content = generate.curl_reference(spec, variant.doc_budget)
+        if ins is Instructions.DOCS_PROGRESSIVE:
+            content = _index_only(content)
+        return ContextBlock(role="system", content=content, label=str(ins))
+
+    bound = _bound_material(variant, "skill")
+    if bound is not None:
+        return ContextBlock(role="system", content=bound, label=str(ins))
 
     if ins.is_authored:
         return ContextBlock(
@@ -61,12 +85,6 @@ def _instruction_block(spec: ApiSpec, variant: Variant) -> ContextBlock | None:
             content=_authored_skill(spec, variant),
             label=str(ins),
         )
-
-    if ins in (Instructions.DOCS_FLAT, Instructions.DOCS_PROGRESSIVE):
-        content = generate.curl_reference(spec, variant.doc_budget)
-        if ins is Instructions.DOCS_PROGRESSIVE:
-            content = _index_only(content)
-        return ContextBlock(role="system", content=content, label=str(ins))
 
     progressive = ins in (
         Instructions.SKILL_GENERATED_PROGRESSIVE,
@@ -77,6 +95,32 @@ def _instruction_block(spec: ApiSpec, variant: Variant) -> ContextBlock | None:
         content=generate.skill_markdown(spec, variant.doc_budget, progressive=progressive),
         label=str(ins),
     )
+
+
+def _refuse_cross_slot_materials(
+    arm: str, ins: Instructions, mats: dict[str, str],
+) -> None:
+    """Fail closed when a binding cannot affect the instruction block.
+
+    Silent no-ops here recreate the plan-arm materials bug: the YAML accepts
+    the path, the run ships something else.
+    """
+    from .axes import ConfigError
+
+    wants_docs = ins in (Instructions.DOCS_FLAT, Instructions.DOCS_PROGRESSIVE)
+    wants_skill = ins is not Instructions.NONE and not wants_docs
+    if mats.get("skill") and not wants_skill:
+        raise ConfigError(
+            f"arm {arm!r}: materials.skill is bound but instructions are "
+            f"{ins.value!r}. Use materials.docs for a docs arm, or set "
+            f"instructions to a skill-* value."
+        )
+    if mats.get("docs") and not wants_docs:
+        raise ConfigError(
+            f"arm {arm!r}: materials.docs is bound but instructions are "
+            f"{ins.value!r}. Use materials.skill for a skill arm, or set "
+            f"instructions to docs-flat / docs-progressive."
+        )
 
 
 #: Extra places to look for an authored skill, appended by whoever owns them.
@@ -110,6 +154,23 @@ def _skill_roots() -> list["Path"]:
         roots.insert(0, Path(override).parent if Path(override).name == "skills"
                      else Path(override))
     return roots
+
+
+def _bound_material(variant: Variant, slot: str) -> str | None:
+    """Content of a plan material binding when the arm declares one."""
+    from pathlib import Path
+
+    from .axes import arm_materials
+
+    ref = arm_materials(variant.preset).get(slot)
+    if not ref:
+        return None
+    path = Path(ref).expanduser()
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"arm {variant.preset!r} materials.{slot}={ref!r} does not exist"
+        )
+    return path.read_text()
 
 
 def _authored_skill(spec: ApiSpec, variant: Variant) -> str:

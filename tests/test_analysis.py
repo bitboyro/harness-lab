@@ -132,6 +132,23 @@ def test_confusion_built_from_rows() -> None:
     assert c.total == 4, "truncated is excluded, as everywhere else"
 
 
+def test_declined_but_clobbered_is_not_a_true_negative() -> None:
+    """Mutating while refusing must lower abstention, not inflate TN."""
+    rows = [
+        dict(BASE, outcome="correct-refusal", answerable=False),
+        dict(BASE, outcome="declined-but-clobbered", answerable=False,
+             clobbered=["$.episodes.ep_1.rating"]),
+        dict(BASE, outcome="false-positive", answerable=False, confident=True),
+    ]
+    arm = _report(rows).arms["A1"]
+    c = arm.confusion
+    assert c.tn == 1 and c.declined_clobbered == 1 and c.fp == 1
+    assert c.specificity == pytest.approx(1 / 3)
+    assert arm.abstention_accuracy == c.specificity
+    assert arm.outcome_counts()["declined-but-clobbered"] == 1
+    assert arm.harm_events == 1
+
+
 def test_below_mde_flags_small_differences() -> None:
     rows = [dict(BASE, arm="Z0", outcome="fail", mcp_spec_revision=None),
             dict(BASE, arm="A1", outcome="pass")]
