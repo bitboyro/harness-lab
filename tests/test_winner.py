@@ -126,6 +126,18 @@ def test_controls_never_win_even_when_they_score_highest() -> None:
     assert verdict.winner in {"A1", "A2"}
 
 
+def test_z_cheat_is_a_control_and_never_wins() -> None:
+    """Z-cheat is a probe (path to answers), not a shippable packaging."""
+    from harness.engine.analysis import is_control
+
+    assert is_control("Z-cheat")
+    rows = (rows_for("Z-cheat", passes=10) + rows_for("A1", passes=5, fails=5)
+            + rows_for("A2", passes=4, fails=6))
+    verdict = evaluate(Report(rows=rows, manifest={}))
+    assert "Z-cheat" not in verdict.scores
+    assert verdict.winner in {"A1", "A2"}
+
+
 def test_controls_are_excluded_from_the_normalisation_range() -> None:
     """Z1's ceiling must not compress the real arms into the bottom of the scale."""
     arms = rows_for("A1", passes=5, fails=5) + rows_for("A2", passes=4, fails=6)

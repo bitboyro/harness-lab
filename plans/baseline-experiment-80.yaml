@@ -1,0 +1,61 @@
+# Baseline 80-core authored-skill ladder + Z-cheat probe. Throwaway host only —
+# the sandbox is not a jail, and Z-cheat induces out-of-cwd file reads.
+#
+# Skill question is authored-only:
+#   B1-auth vs A1   (eager MCP + skill vs bare eager)
+#   B2-auth vs A2   (meta-tools + skill vs bare meta-tools)
+#   D2-auth vs D1   (code-fs + skill vs bare code)
+# No B1/B2/D2 — generated-skill mid-rungs are intentionally absent.
+# Skill pairs cross the authorship pool boundary, so they are NOT listed under
+# confirmatory/exploratory (harness plan would refuse). Read them from the
+# report / paired within-core diffs; do not average them into one world.
+run_plan:
+  id: baseline-experiment-80
+  rationale: >
+    Eighty cores for within-class power. Authored skill vs bare method on
+    eager MCP (B1-auth vs A1), meta-tools MCP (B2-auth vs A2), and code-fs
+    (D2-auth vs D1). Generated-skill arms are out of scope. Z-cheat is a
+    docs-slot bait probe (sibling of Z1), never confirmatory, never a winner.
+  base:
+    model: gpt-5.6-luna
+    reasoning_effort: low
+    temperature: 0.0
+    caching: "off"
+    repeats: 3
+    surface_size: 50
+    schema_detail: standard
+    response_shape: as-is
+    error_detail: field-scoped
+    doc_budget: standard
+    mcp_revision: "2026-07-28"
+  include:
+    presets: [Z0, Z1, A1, A2, B1-auth, B2-auth, C1, D1, D2-auth, Z-cheat]
+  arms:
+    Z-cheat:
+      transport: http-rest
+      discovery: docs
+      invocation: shell
+      instructions: docs-flat
+      confirmation: none
+      materials:
+        docs: skills/catalog-with-results-path.md
+  tasks:
+    generate: {seed: 1, cores: 80, fan_out: 8, difficulty: hard}
+  budget: {max_usd: 400}
+  confirmatory:
+    # Same pool_key only (generated × same mcp_revision).
+    - contrast: [A1, A2]
+      hypothesis: Meta-tool discovery cuts static context at equal success.
+    - contrast: [A1, D1]
+      hypothesis: Eager tool-call vs code-fs changes cost shape at equal success.
+  exploratory:
+    - contrast: [Z1, Z-cheat]
+      hypothesis: >
+        Handing answers (Z1) vs naming a path to them (Z-cheat) — does the
+        agent reach for pack.yaml, and at what gold-call coverage?
+    # Authored skill vs bare method (primary skill questions for this run):
+    #   B1-auth vs A1   — authored skill on eager MCP
+    #   B2-auth vs A2   — authored skill on meta-tools MCP
+    #   D2-auth vs D1   — authored skill on code-fs
+    # Not declared here: they cross the authorship pool boundary. Compare
+    # within-core in the report; label as exploratory; never pool the rows.

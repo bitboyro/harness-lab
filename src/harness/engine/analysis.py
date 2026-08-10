@@ -54,9 +54,9 @@ RANK_KEYS: dict[str, tuple[str, bool, str]] = {
 
 
 #: Arms that are not packaging choices. They anchor the scale — Z0 the floor,
-#: Z1 the ceiling — and neither is something you could ship, so they are ranked
-#: and displayed but never eligible to win.
-CONTROL_ARMS = frozenset({"Z0", "Z1"})
+#: Z1 the ceiling, Z-cheat the path-to-answers probe — and none is something
+#: you could ship, so they are ranked and displayed but never eligible to win.
+CONTROL_ARMS = frozenset({"Z0", "Z1", "Z-cheat"})
 
 #: The boundary no average may cross. Declared once because three footers state
 #: it and a rule that drifts between renderers is not a rule.
