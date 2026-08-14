@@ -11,7 +11,15 @@ from harness.engine.lint import Confidence, scorecard
 
 @pytest.fixture(autouse=True)
 def registered():
+    from harness.engine.lint import _REGISTRY
+
+    saved = dict(_REGISTRY)
     rules.register_defaults()
+    try:
+        yield
+    finally:
+        _REGISTRY.clear()
+        _REGISTRY.update(saved)
 
 
 def find(spec, rule_id):

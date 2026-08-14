@@ -1,0 +1,7 @@
+{
+  "generator": "authored",
+  "authored_commit": "50bfcbd35e452c1cc9761e9bc1b95b6d94b82e7e",
+  "spec_source": "harness-ui/docs/contracts.md",
+  "api_version": "0.0.1-SNAPSHOT",
+  "note": "authored_commit must predate any benchmark matrix that cites this skill (V9)"
+}

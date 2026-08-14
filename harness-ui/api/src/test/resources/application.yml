@@ -1,0 +1,10 @@
+server:
+  address: 127.0.0.1
+  port: 0
+
+harness:
+  data: /tmp/harness-data
+  cli: harness
+  adapter: python3
+  adapter-script: ../adapter/harness_json.py
+  expect-version: "0.0.1"

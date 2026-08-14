@@ -354,3 +354,22 @@ def test_projection_ignores_traces_from_before_compression(tmp_path) -> None:
     (store.root / "traces" / "new.json.gz").write_bytes(b"x" * 100_000)
     needed, _ = _disk_shortfall(store, planned=100_000_000)
     assert needed == 100_000_000 * 100_000, "legacy traces must not be sampled"
+
+
+def test_smoke_skips_disk_reserve(tmp_path, monkeypatch) -> None:
+    import shutil
+
+    from harness.cli import _disk_reserve_bytes, _disk_shortfall, build_parser
+    from harness.engine.results import ResultStore
+
+    store = ResultStore(tmp_path)
+    # Tighter than the 5GB default reserve, but enough for a smoke matrix.
+    monkeypatch.setattr(
+        shutil, "disk_usage",
+        lambda _p: shutil._ntuple_diskusage(0, 0, int(1.5 * 2**30)))
+
+    args = build_parser().parse_args(["run", "--out", str(tmp_path), "--smoke"])
+    reserve = _disk_reserve_bytes(args)
+    assert reserve == 0
+    assert _disk_shortfall(store, planned=12, reserve_bytes=reserve) is None
+    assert _disk_shortfall(store, planned=12) is not None

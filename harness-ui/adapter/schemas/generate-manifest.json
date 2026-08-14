@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "harness-ui/adapter/generate-manifest",
+  "title": "AdapterGenerateManifest",
+  "type": "object",
+  "required": ["harness_version", "manifest"],
+  "additionalProperties": false,
+  "properties": {
+    "harness_version": { "type": "string" },
+    "manifest": {
+      "type": "object",
+      "required": ["job_id", "harness_version", "materials_dir", "validation"],
+      "properties": {
+        "job_id": { "type": "string" },
+        "target_id": { "type": ["string", "null"] },
+        "harness_version": { "type": "string" },
+        "created_at": { "type": "string" },
+        "enriched_spec": { "type": "string" },
+        "materials_dir": { "type": "string" },
+        "analyze_path": { "type": ["string", "null"] },
+        "arms_probe": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "operation_count": { "type": ["integer", "null"] },
+        "validation": { "type": "string" },
+        "pack_path": { "type": ["string", "null"] },
+        "pack_id": { "type": ["string", "null"] },
+        "graded_tasks": { "type": ["integer", "null"] },
+        "fixture_count": { "type": ["integer", "null"] },
+        "task_count": { "type": ["integer", "null"] },
+        "phases_done": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

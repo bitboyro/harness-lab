@@ -287,7 +287,19 @@ def load_plan(path: str | Path) -> RunPlan:
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict) or "run_plan" not in raw:
         raise ConfigError(f"{path}: expected a top-level 'run_plan' mapping")
-    rp = raw["run_plan"]
+    return run_plan_from_mapping(raw["run_plan"], path=str(path))
+
+
+def run_plan_from_mapping(rp: dict[str, Any],
+                          *,
+                          path: str | None = None) -> RunPlan:
+    """Build a :class:`RunPlan` from a parsed ``run_plan`` mapping.
+
+    Shared by :func:`load_plan`, experiment sidecars, and the UI adapter so
+    the declaration shape stays one object everywhere.
+    """
+    if not isinstance(rp, dict):
+        raise ConfigError("run_plan must be a mapping")
 
     def contrasts(key: str) -> tuple[Contrast, ...]:
         return tuple(
@@ -297,12 +309,9 @@ def load_plan(path: str | Path) -> RunPlan:
 
     tasks = dict(rp.get("tasks") or {})
     task_count = int(rp.get("task_count", 1))
-    # tasks.generate.cores drives the controlled world size; prefer it over a
-    # bare task_count when both appear, so a plan file is self-describing.
     if "generate" in tasks:
         gen = tasks["generate"] or {}
         cores = int(gen.get("cores", 0) or 0)
-        # Rough: each core yields ~5 matched tasks in the controlled pack.
         if cores and "task_count" not in rp:
             task_count = cores * 5
 
@@ -319,5 +328,5 @@ def load_plan(path: str | Path) -> RunPlan:
         tasks=tasks,
         sweep=dict(rp.get("sweep") or {}),
         budget=dict(rp.get("budget") or {}),
-        path=str(path),
+        path=path,
     )

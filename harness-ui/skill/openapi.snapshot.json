@@ -1,0 +1,2234 @@
+{
+  "openapi" : "3.0.1",
+  "info" : {
+    "title" : "OpenAPI definition",
+    "version" : "v0"
+  },
+  "servers" : [ {
+    "url" : "http://localhost",
+    "description" : "Generated server url"
+  } ],
+  "paths" : {
+    "/api/v1/targets/{id}/contract" : {
+      "get" : {
+        "tags" : [ "target-controller" ],
+        "operationId" : "read_target_contract",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TargetContract"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "target-controller" ],
+        "operationId" : "write_target_contract",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/WriteTargetContractRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{id}/artifacts/{*name}" : {
+      "get" : {
+        "tags" : [ "run-controller" ],
+        "operationId" : "get_artifact",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "name",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "binary"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "run-controller" ],
+        "operationId" : "put_artifact",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "name",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "string",
+                "format" : "byte"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ArtifactRef"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/packs/{id}" : {
+      "get" : {
+        "tags" : [ "pack-controller" ],
+        "operationId" : "read_pack",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PackDocument"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "pack-controller" ],
+        "operationId" : "write_pack",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/WritePackRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/WritePackResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "pack-controller" ],
+        "operationId" : "delete_pack",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        }
+      }
+    },
+    "/api/v1/experiments/{id}" : {
+      "get" : {
+        "tags" : [ "experiment-controller" ],
+        "operationId" : "get_experiment",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "slice",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JsonNode"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "experiment-controller" ],
+        "operationId" : "update_experiment",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateExperimentRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ExperimentRef"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "experiment-controller" ],
+        "operationId" : "delete_experiment",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        }
+      }
+    },
+    "/api/v1/config/providers/{id}" : {
+      "put" : {
+        "tags" : [ "config-controller" ],
+        "operationId" : "upsert_provider",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpsertProviderRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProviderView"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "config-controller" ],
+        "operationId" : "delete_provider",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        }
+      }
+    },
+    "/api/v1/config/providers/{id}/models/{modelId}" : {
+      "put" : {
+        "tags" : [ "config-controller" ],
+        "operationId" : "upsert_model",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "modelId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpsertModelRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProviderView"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "config-controller" ],
+        "operationId" : "delete_model",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "modelId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProviderView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp" : {
+      "post" : {
+        "tags" : [ "mcp-controller" ],
+        "operationId" : "handle",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/JsonNode"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JsonNode"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/targets" : {
+      "get" : {
+        "tags" : [ "target-controller" ],
+        "operationId" : "list_targets",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/Target"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "target-controller" ],
+        "operationId" : "upload_contract",
+        "parameters" : [ {
+          "name" : "mcp_url",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "file" : {
+                    "type" : "string",
+                    "format" : "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Target"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/targets/{id}/lint" : {
+      "post" : {
+        "tags" : [ "target-controller" ],
+        "operationId" : "lint_target",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JsonNode"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs" : {
+      "get" : {
+        "tags" : [ "run-controller" ],
+        "operationId" : "list_runs",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/RunSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "run-controller" ],
+        "operationId" : "start_run",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RunRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "202" : {
+            "description" : "Accepted",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RunJob"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/project" : {
+      "post" : {
+        "tags" : [ "run-controller" ],
+        "operationId" : "project_run_cost",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RunRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CostProjection"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/packs/{id}/validate" : {
+      "post" : {
+        "tags" : [ "pack-controller" ],
+        "operationId" : "validate_pack",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ValidatePackRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JsonNode"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/packs/draft" : {
+      "post" : {
+        "tags" : [ "pack-controller" ],
+        "operationId" : "draft_pack",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DraftPackRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PackRef"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/generate" : {
+      "post" : {
+        "tags" : [ "generate-controller" ],
+        "operationId" : "start_generate",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/StartGenerateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "202" : {
+            "description" : "Accepted",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/GenerateJob"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/generate/{jobId}/experiment" : {
+      "post" : {
+        "tags" : [ "generate-controller" ],
+        "operationId" : "create_experiment_from_generate",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateExperimentFromGenerateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ExperimentRef"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/experiments" : {
+      "get" : {
+        "tags" : [ "experiment-controller" ],
+        "operationId" : "list_experiments",
+        "parameters" : [ {
+          "name" : "all",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean",
+            "default" : false
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ExperimentSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "experiment-controller" ],
+        "operationId" : "create_experiment",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateExperimentRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ExperimentRef"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/experiments/{id}/run" : {
+      "post" : {
+        "tags" : [ "experiment-controller" ],
+        "operationId" : "start_experiment_run",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ExperimentRunRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "202" : {
+            "description" : "Accepted",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RunJob"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/experiments/{id}/run/project" : {
+      "post" : {
+        "tags" : [ "experiment-controller" ],
+        "operationId" : "project_experiment_run",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ExperimentRunRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ExperimentRunProjection"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/experiments/{id}/reports/snapshot" : {
+      "post" : {
+        "tags" : [ "experiment-controller" ],
+        "operationId" : "snapshot_experiment_report",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReportSnapshotRef"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/experiments/{id}/arms" : {
+      "post" : {
+        "tags" : [ "experiment-controller" ],
+        "operationId" : "add_experiment_arms",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AddExperimentArmsRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ExperimentRef"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compare" : {
+      "post" : {
+        "tags" : [ "compare-controller" ],
+        "operationId" : "compare_runs",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CompareRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CompareResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/artifacts/{runId}/{*path}" : {
+      "get" : {
+        "tags" : [ "public-artifact-controller" ],
+        "operationId" : "get",
+        "parameters" : [ {
+          "name" : "runId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "path",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/targets/{id}" : {
+      "get" : {
+        "tags" : [ "target-controller" ],
+        "operationId" : "get_target",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Target"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "target-controller" ],
+        "operationId" : "delete_target",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{id}/transcripts/{arm}/{taskId}/{repeat}" : {
+      "get" : {
+        "tags" : [ "run-controller" ],
+        "operationId" : "get_transcript",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "arm",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "repeat",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "verbose",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean",
+            "default" : false
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TranscriptResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{id}/report" : {
+      "get" : {
+        "tags" : [ "run-controller" ],
+        "operationId" : "get_report",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JsonNode"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{id}/progress" : {
+      "get" : {
+        "tags" : [ "run-controller" ],
+        "operationId" : "get_run_progress",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProgressEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{id}/cells" : {
+      "get" : {
+        "tags" : [ "run-controller" ],
+        "operationId" : "cells",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/CellRef"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{id}/brief" : {
+      "get" : {
+        "tags" : [ "run-controller" ],
+        "operationId" : "get_brief",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JsonNode"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{id}/artifacts" : {
+      "get" : {
+        "tags" : [ "run-controller" ],
+        "operationId" : "list_artifacts",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ArtifactRef"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{id}/analysis" : {
+      "get" : {
+        "tags" : [ "run-controller" ],
+        "operationId" : "get_analysis",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "only",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JsonNode"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/packs" : {
+      "get" : {
+        "tags" : [ "pack-controller" ],
+        "operationId" : "list_packs",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/PackRef"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/generate/{jobId}/progress" : {
+      "get" : {
+        "tags" : [ "generate-controller" ],
+        "operationId" : "get_generate_progress",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/GenerateProgress"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/generate/{jobId}/manifest" : {
+      "get" : {
+        "tags" : [ "generate-controller" ],
+        "operationId" : "get_generate_manifest",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JsonNode"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/generate/{jobId}/artifacts" : {
+      "get" : {
+        "tags" : [ "generate-controller" ],
+        "operationId" : "list_generate_artifacts",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ArtifactRef"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/generate/{jobId}/artifacts/{*name}" : {
+      "get" : {
+        "tags" : [ "generate-controller" ],
+        "operationId" : "get_generate_artifact",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "name",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/experiments/{id}/reports" : {
+      "get" : {
+        "tags" : [ "experiment-controller" ],
+        "operationId" : "list_experiment_reports",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ReportSnapshotRef"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/experiments/{id}/coverage" : {
+      "get" : {
+        "tags" : [ "experiment-controller" ],
+        "operationId" : "get_experiment_coverage",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "slice",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JsonNode"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/run-defaults" : {
+      "get" : {
+        "tags" : [ "config-controller" ],
+        "operationId" : "get_run_defaults",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JsonNode"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/llm" : {
+      "get" : {
+        "tags" : [ "config-controller" ],
+        "operationId" : "get_llm_config",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/LlmConfig"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{id}" : {
+      "delete" : {
+        "tags" : [ "run-controller" ],
+        "operationId" : "delete_run",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "WriteTargetContractRequest" : {
+        "required" : [ "text" ],
+        "type" : "object",
+        "properties" : {
+          "text" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ArtifactRef" : {
+        "type" : "object",
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "sizeBytes" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "WritePackRequest" : {
+        "required" : [ "yaml" ],
+        "type" : "object",
+        "properties" : {
+          "yaml" : {
+            "type" : "string"
+          }
+        }
+      },
+      "WritePackResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "valid" : {
+            "type" : "boolean"
+          },
+          "error" : {
+            "type" : "string"
+          }
+        }
+      },
+      "UpdateExperimentRequest" : {
+        "required" : [ "yaml" ],
+        "type" : "object",
+        "properties" : {
+          "yaml" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ExperimentRef" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "error" : {
+            "type" : "string"
+          }
+        }
+      },
+      "RegisteredModel" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "price" : {
+            "type" : "string"
+          }
+        }
+      },
+      "UpsertProviderRequest" : {
+        "type" : "object",
+        "properties" : {
+          "label" : {
+            "type" : "string"
+          },
+          "adapter" : {
+            "type" : "string"
+          },
+          "baseUrl" : {
+            "type" : "string"
+          },
+          "apiKey" : {
+            "type" : "string"
+          },
+          "models" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/RegisteredModel"
+            }
+          }
+        }
+      },
+      "ProviderView" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "adapter" : {
+            "type" : "string"
+          },
+          "baseUrl" : {
+            "type" : "string"
+          },
+          "builtin" : {
+            "type" : "boolean"
+          },
+          "apiKeySet" : {
+            "type" : "boolean"
+          },
+          "apiKeyHint" : {
+            "type" : "string"
+          },
+          "processEnvKeySet" : {
+            "type" : "boolean"
+          },
+          "processBaseUrl" : {
+            "type" : "string"
+          },
+          "models" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/RegisteredModel"
+            }
+          }
+        }
+      },
+      "UpsertModelRequest" : {
+        "type" : "object",
+        "properties" : {
+          "label" : {
+            "type" : "string"
+          },
+          "price" : {
+            "type" : "string"
+          }
+        }
+      },
+      "JsonNode" : {
+        "type" : "object"
+      },
+      "Target" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "kind" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "RunRequest" : {
+        "required" : [ "id" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "packId" : {
+            "type" : "string"
+          },
+          "targetId" : {
+            "type" : "string"
+          },
+          "presets" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "model" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "reasoningEffort" : {
+            "type" : "string"
+          },
+          "repeats" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "smoke" : {
+            "type" : "boolean"
+          },
+          "probe" : {
+            "type" : "boolean"
+          },
+          "resume" : {
+            "type" : "boolean"
+          },
+          "dryRun" : {
+            "type" : "boolean"
+          },
+          "allowCodeSandbox" : {
+            "type" : "boolean"
+          },
+          "approve" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "RunJob" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "queued", "running", "succeeded", "failed", "cancelled", "declined" ]
+          },
+          "pid" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "exitCode" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "outDir" : {
+            "type" : "string"
+          },
+          "startedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "finishedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "errorKind" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        }
+      },
+      "CostProjection" : {
+        "type" : "object",
+        "properties" : {
+          "projectionText" : {
+            "type" : "string"
+          },
+          "exitCode" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "stderrNames" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "ValidatePackRequest" : {
+        "type" : "object",
+        "properties" : {
+          "baseUrl" : {
+            "type" : "string"
+          }
+        }
+      },
+      "DraftPackRequest" : {
+        "required" : [ "targetId" ],
+        "type" : "object",
+        "properties" : {
+          "targetId" : {
+            "type" : "string"
+          },
+          "outId" : {
+            "type" : "string"
+          }
+        }
+      },
+      "PackRef" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "valid" : {
+            "type" : "boolean"
+          },
+          "error" : {
+            "type" : "string"
+          }
+        }
+      },
+      "GeneratePhases" : {
+        "type" : "object",
+        "properties" : {
+          "analyze" : {
+            "type" : "boolean"
+          },
+          "materials" : {
+            "type" : "boolean"
+          },
+          "fixtures" : {
+            "type" : "boolean"
+          },
+          "pack" : {
+            "type" : "boolean"
+          },
+          "enrich" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "GenerateStaging" : {
+        "type" : "object",
+        "properties" : {
+          "baseUrlEnv" : {
+            "type" : "string"
+          },
+          "authEnv" : {
+            "type" : "string"
+          },
+          "seed" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "baseUrl" : {
+            "type" : "string"
+          },
+          "authToken" : {
+            "type" : "string"
+          }
+        }
+      },
+      "StartGenerateRequest" : {
+        "required" : [ "jobId", "staging", "targetId" ],
+        "type" : "object",
+        "properties" : {
+          "jobId" : {
+            "type" : "string"
+          },
+          "targetId" : {
+            "type" : "string"
+          },
+          "staging" : {
+            "$ref" : "#/components/schemas/GenerateStaging"
+          },
+          "phases" : {
+            "$ref" : "#/components/schemas/GeneratePhases"
+          },
+          "approveEnrich" : {
+            "type" : "boolean"
+          },
+          "mcpGateway" : {
+            "type" : "boolean"
+          },
+          "useLocalMock" : {
+            "type" : "boolean"
+          },
+          "mcpUrl" : {
+            "type" : "string"
+          }
+        }
+      },
+      "GenerateJob" : {
+        "type" : "object",
+        "properties" : {
+          "jobId" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "workspace" : {
+            "type" : "string"
+          }
+        }
+      },
+      "CreateExperimentFromGenerateRequest" : {
+        "required" : [ "experimentId" ],
+        "type" : "object",
+        "properties" : {
+          "experimentId" : {
+            "type" : "string"
+          },
+          "planOverrides" : {
+            "type" : "string"
+          }
+        }
+      },
+      "CreateExperimentRequest" : {
+        "required" : [ "id" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "yaml" : {
+            "type" : "string"
+          },
+          "planPath" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ExperimentRunRequest" : {
+        "type" : "object",
+        "properties" : {
+          "slice" : {
+            "type" : "string"
+          },
+          "approve" : {
+            "type" : "boolean"
+          },
+          "allowCodeSandbox" : {
+            "type" : "boolean"
+          },
+          "concurrency" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "ExperimentRunProjection" : {
+        "type" : "object",
+        "properties" : {
+          "projectionText" : {
+            "type" : "string"
+          },
+          "exitCode" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "stderrNames" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "missingCells" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "voidedCells" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "slice" : {
+            "type" : "string"
+          },
+          "armsScheduled" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "ReportSnapshotRef" : {
+        "type" : "object",
+        "properties" : {
+          "at" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "ledgerRows" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "AddExperimentArmsRequest" : {
+        "required" : [ "presets" ],
+        "type" : "object",
+        "properties" : {
+          "presets" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "CompareRequest" : {
+        "required" : [ "runIds" ],
+        "type" : "object",
+        "properties" : {
+          "runIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "CompareResult" : {
+        "type" : "object",
+        "properties" : {
+          "refused" : {
+            "type" : "boolean"
+          },
+          "refusalText" : {
+            "type" : "string"
+          },
+          "brokenBoundary" : {
+            "type" : "string"
+          },
+          "artifactDir" : {
+            "type" : "string"
+          },
+          "stdout" : {
+            "type" : "string"
+          }
+        }
+      },
+      "TargetContract" : {
+        "type" : "object",
+        "properties" : {
+          "text" : {
+            "type" : "string"
+          },
+          "format" : {
+            "type" : "string"
+          }
+        }
+      },
+      "RunSummary" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "outDir" : {
+            "type" : "string"
+          },
+          "startedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "finishedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "ledgerRows" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "TranscriptResponse" : {
+        "type" : "object",
+        "properties" : {
+          "text" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ProgressEnvelope" : {
+        "type" : "object",
+        "properties" : {
+          "job" : {
+            "$ref" : "#/components/schemas/RunJob"
+          },
+          "progress" : {
+            "$ref" : "#/components/schemas/JsonNode"
+          },
+          "terminal" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "CellRef" : {
+        "type" : "object",
+        "properties" : {
+          "arm" : {
+            "type" : "string"
+          },
+          "taskId" : {
+            "type" : "string"
+          },
+          "repeat" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "outcome" : {
+            "type" : "string"
+          },
+          "turns" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "calls" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "PackDocument" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "yaml" : {
+            "type" : "string"
+          }
+        }
+      },
+      "GenerateProgress" : {
+        "type" : "object",
+        "properties" : {
+          "job" : {
+            "$ref" : "#/components/schemas/GenerateJob"
+          },
+          "terminal" : {
+            "type" : "boolean"
+          },
+          "status" : {
+            "$ref" : "#/components/schemas/JsonNode"
+          },
+          "error" : {
+            "$ref" : "#/components/schemas/JsonNode"
+          }
+        }
+      },
+      "ExperimentSummary" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "hasLedger" : {
+            "type" : "boolean"
+          },
+          "coverageFraction" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "model" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "planId" : {
+            "type" : "string"
+          }
+        }
+      },
+      "LlmConfig" : {
+        "type" : "object",
+        "properties" : {
+          "adapters" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "adaptersNote" : {
+            "type" : "string"
+          },
+          "providers" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ProviderView"
+            }
+          }
+        }
+      }
+    }
+  }
+}

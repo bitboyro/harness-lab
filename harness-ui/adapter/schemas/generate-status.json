@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "harness-ui/adapter/generate-status",
+  "title": "AdapterGenerateStatus",
+  "type": "object",
+  "required": ["harness_version", "terminal", "status", "error"],
+  "additionalProperties": false,
+  "properties": {
+    "harness_version": { "type": "string" },
+    "terminal": { "type": "boolean" },
+    "status": {
+      "type": ["object", "null"],
+      "required": ["job_id", "phase", "phases_done", "message"],
+      "properties": {
+        "job_id": { "type": "string" },
+        "phase": { "type": "string" },
+        "phases_done": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "message": { "type": "string" },
+        "fraction": { "type": ["number", "null"] },
+        "started_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "cost_usd_so_far": { "type": ["number", "null"] }
+      }
+    },
+    "error": {
+      "type": ["object", "null"],
+      "required": ["exit_code", "kind", "message"],
+      "properties": {
+        "exit_code": { "type": "integer" },
+        "kind": { "type": "string" },
+        "message": { "type": "string" },
+        "phase": { "type": ["string", "null"] },
+        "operator_fix": { "type": ["string", "null"] },
+        "details": { "type": ["object", "null"] }
+      }
+    }
+  }
+}

@@ -11,6 +11,16 @@ Versions follow [semver](https://semver.org/spec/v2.0.0.html).
   (credentials stripped from URLs) so `harness compare` can name what changed
   when the same tasks run against different servers. Controlled runs omit the
   keys. See [docs/test-your-api-harness.md](./docs/test-your-api-harness.md).
+- `harness generate` — OpenAPI → materials, fixtures, graded pack, optional enrich.
+- `harness mock serve` — local OpenAPI HTTP stub + MCP gateway for field A-arms.
+- Experiment sidecar (`experiment.yaml`) + `harness experiment` CLI for additive
+  matrices / missing-cell runs.
+- harness-ui: local Spring + Next wrapper — targets, packs, runs, experiments,
+  LLM settings, From-OpenAPI wizard, local mock / MCP staging, MCP tools.
+
+### Changed
+
+- Field probe A/B arms require `mcp_gateway` (or local mock / customer MCP URL).
 
 ## [0.0.1] — 2026-08-09
 

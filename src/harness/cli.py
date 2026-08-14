@@ -23,6 +23,7 @@ import os
 
 import yaml
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -445,9 +446,13 @@ def _apply_plan(args: argparse.Namespace) -> None:
     if not getattr(args, "plan", None):
         return
     plan = load_plan(args.plan)
+    _apply_run_plan_to_args(args, plan)
+    args._plan = plan
+
+
+def _apply_run_plan_to_args(args: argparse.Namespace, plan) -> None:
+    """Fill unset run flags from a resolved :class:`RunPlan`."""
     args.plan_id = plan.id
-    # Only fill fields the operator did not set on the CLI. argparse defaults
-    # look like "set", so we key off a small set of sentinel defaults.
     if not args.presets:
         args.presets = list(plan.presets)
     if args.id in ("phase-0", None):
@@ -475,11 +480,10 @@ def _apply_plan(args: argparse.Namespace) -> None:
         if _is_cli_default(args, "difficulty") and "difficulty" in gen:
             args.difficulty = str(gen["difficulty"])
     pack = (plan.tasks or {}).get("pack")
-    if pack and not args.pack:
+    if pack and not getattr(args, "pack", None):
         args.pack = Path(pack)
-    if plan.sweep.get("error_detail") and not args.sweep_error_detail:
+    if plan.sweep.get("error_detail") and not getattr(args, "sweep_error_detail", None):
         args.sweep_error_detail = list(plan.sweep["error_detail"])
-    args._plan = plan  # consulted for approval / budget
 
 
 def _is_cli_default(args: argparse.Namespace, flag: str) -> bool:
@@ -569,7 +573,25 @@ _DISK_RESERVE_BYTES = 5 * 2**30
 _TRACE_BYTES = 230_000
 
 
-def _disk_shortfall(store, planned: int) -> tuple[int, int] | None:
+def _disk_reserve_bytes(args: argparse.Namespace) -> int:
+    """Swap headroom required before a matrix starts.
+
+    Full matrices keep the 5GB default — the 2026-08-06 incident. Smoke,
+    probe, and experiment smoke slices skip it: they finish in a minute and
+    write a few MB of traces, so the reserve was blocking dev machines that
+    had room for the run itself.
+    """
+    if getattr(args, "disk_reserve_gb", None) is not None:
+        return max(0, int(args.disk_reserve_gb * 2**30))
+    if args.smoke or args.probe:
+        return 0
+    if getattr(args, "experiment_slice", None) == "smoke":
+        return 0
+    return _DISK_RESERVE_BYTES
+
+
+def _disk_shortfall(store, planned: int,
+                    reserve_bytes: int = _DISK_RESERVE_BYTES) -> tuple[int, int] | None:
     """(needed, free) if this matrix cannot fit, else None.
 
     Eight hours of API spend should not die at 99% because nothing looked at
@@ -586,7 +608,7 @@ def _disk_shortfall(store, planned: int) -> tuple[int, int] | None:
     per_trace = (sum(sample) / len(sample)) if sample else _TRACE_BYTES
     need = int(planned * max(per_trace, 1))
     free = shutil.disk_usage(store.root).free
-    return (need, free) if need + _DISK_RESERVE_BYTES > free else None
+    return (need, free) if need + reserve_bytes > free else None
 
 
 def _preflight(provider, config) -> str | None:
@@ -632,7 +654,9 @@ _RESUME_LIST_FIELDS = frozenset({"presets", "sweep_error_detail", "classes"})
 
 
 def _inherit_run_config(args: argparse.Namespace,
-                        manifest: dict[str, Any]) -> list[str]:
+                        manifest: dict[str, Any],
+                        *,
+                        skip: frozenset[str] = frozenset()) -> list[str]:
     """Make `--resume` reproduce the run it is resuming.
 
     Without this a resume is shaped by argparse defaults rather than by the
@@ -647,9 +671,14 @@ def _inherit_run_config(args: argparse.Namespace,
     The manifest is authoritative because it is what produced the rows already
     on disk. Returns the fields it had to change so the caller can print them
     before spending: an overridden flag that nobody mentions is its own trap.
+
+    ``skip`` names fields an experiment sidecar owns (``presets``) so additive
+    arm growth does not inherit the manifest's frozen arm list.
     """
     changed: list[str] = []
     for field in _RESUME_INHERITED:
+        if field in skip:
+            continue
         if field not in manifest:
             continue  # written by an older harness; leave this arg alone
         stored, current = manifest[field], getattr(args, field)
@@ -728,10 +757,18 @@ def cmd_run(args: argparse.Namespace) -> int:
     # what this invocation is: every line below reads args that the manifest
     # may be about to correct.
     store = ResultStore(args.out)
+    from .engine.experiment_sidecar import ExperimentSidecar, has_sidecar, missing_cells
+
+    sidecar = None
+    if has_sidecar(args.out):
+        sidecar = ExperimentSidecar.load(args.out)
+        sidecar.validate_world_lock(store)
+
     prior = store.manifest() if args.resume else {}
     done = store.completed() if args.resume else set()
     if args.resume:
-        if changed := _inherit_run_config(args, prior):
+        skip = frozenset({"presets"}) if sidecar else frozenset()
+        if changed := _inherit_run_config(args, prior, skip=skip):
             print("inheriting from manifest.json — this invocation disagreed:")
             print("\n".join(changed))
         elif done and not prior:
@@ -742,6 +779,11 @@ def cmd_run(args: argparse.Namespace) -> int:
             kinds = Counter(r["error_kind"] for r in voided)
             print(f"re-running {len(voided)} runs voided by infra failure "
                   f"({', '.join(f'{k}={n}' for k, n in kinds.most_common())})")
+
+    if sidecar and not args.presets:
+        args.presets = list(sidecar.active_presets())
+        if not getattr(args, "_plan", None):
+            args._plan = sidecar.run_plan()
 
     presets = tuple(args.presets or ("Z0", "A1", "A2", "C1", "D1"))
     # A sweep varies one property of the API while holding packaging fixed.
@@ -820,17 +862,32 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"\nrefusing to start: {e}", file=sys.stderr)
         return 2
 
+    slice_spec = (sidecar.slice_spec(getattr(args, "experiment_slice", None))
+                  if sidecar else None)
+    if sidecar:
+        schedule = missing_cells(
+            store,
+            presets=sidecar.active_presets(),
+            tasks=tasks,
+            repeats=args.repeats,
+            slice_spec=slice_spec,
+        )
+    else:
+        schedule = None
+
     planned = [
         (label, arm, overrides, task, repeat)
         for label, arm, overrides in arm_specs
         for task in tasks
         for repeat in range(args.repeats)
-        if (label, task.id, repeat) not in done
-        # Methods that need prefetch (Z1) only run on tasks with a gold
-        # sequence — axis-derived, not a hardcoded arm name. Writes have none.
+        if (schedule is None and (label, task.id, repeat) not in done
+            or schedule is not None and (label, task.id, repeat) in schedule)
         and not _skip_for_needs(resolved_arms[label], task)
     ]
-    if done:
+    if sidecar and slice_spec:
+        print(f"slice {getattr(args, 'experiment_slice', None)!r}: "
+              f"{len(planned)} cells to run")
+    elif done:
         print(f"resuming: {len(done)} runs already on disk, {len(planned)} to go")
 
     from .engine.providers import get as get_provider
@@ -845,12 +902,17 @@ def cmd_run(args: argparse.Namespace) -> int:
               f"budget.max_usd=${plan.max_usd:,.2f}. Cut the matrix or raise "
               f"the cap.", file=sys.stderr)
         return 2
-    if (short := _disk_shortfall(store, len(planned))) is not None:
+    if (short := _disk_shortfall(store, len(planned),
+                                 _disk_reserve_bytes(args))) is not None:
         need, free = short
+        reserve = _disk_reserve_bytes(args)
+        reserve_gb = reserve / 2**30
         print(f"\nnot enough disk: {len(planned)} runs need ~{need / 2**30:.1f} GB "
-              f"of traces, {free / 2**30:.1f} GB free (plus 5 GB reserved so the "
-              f"machine can still swap).\nFree space or move --out to another "
-              f"volume, then re-run with --resume.")
+              f"of traces, {free / 2**30:.1f} GB free"
+              f"{f' (plus {reserve_gb:.1f} GB reserved so the machine can still swap)' if reserve else ''}.\n"
+              f"Free space or move --out to another volume, then re-run with --resume.\n"
+              f"For smoke/probe only, the reserve is skipped; override with "
+              f"--disk-reserve-gb.")
         return 1
     if not args.yes and not _confirm():
         print("aborted")
@@ -1004,6 +1066,19 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     pool.shutdown(wait=True)
 
+    if sidecar and planned:
+        import uuid
+        sidecar.append_episode({
+            "id": uuid.uuid4().hex[:12],
+            "started_at": prior.get("created_at") or store.manifest().get("created_at"),
+            "finished_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            "slice": getattr(args, "experiment_slice", None),
+            "arms_scheduled": list(sidecar.active_presets()),
+            "planned_cells": len(planned),
+            "completed_before": len(done),
+            "job_id": args.id,
+        })
+
     print()
     final = _build_report(store)
     print(render(list(store.rows()), store.manifest(), report=final))
@@ -1146,6 +1221,182 @@ def cmd_scaffold(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_generate_analyze(args: argparse.Namespace) -> int:
+    from .generate_run import run_analyze
+
+    payload = run_analyze(args.spec, args.out, job_id=args.job_id)
+    print(f"{payload['spec_title']} v{payload['spec_version']} — "
+          f"{payload['operation_count']} operations, "
+          f"{len(payload['findings'])} findings")
+    print(f"wrote {args.out}/analyze.json")
+    return 0
+
+
+def cmd_generate_materials(args: argparse.Namespace) -> int:
+    from .engine.axes import DocBudget
+    from .generate_run import run_materials
+    from .generate_workspace import init_workspace, read_status
+
+    workspace = args.out.resolve()
+    if read_status(workspace) is None:
+        init_workspace(workspace, args.job_id or workspace.name)
+
+    summary = run_materials(
+        args.spec,
+        workspace,
+        doc_budget=DocBudget(args.doc_budget),
+        presets=tuple(args.presets or ()),
+    )
+    print(f"wrote {workspace / 'materials'}  "
+          f"({summary['tool_count']} tools, arms: {', '.join(summary['arms_probe'])})")
+    return 0
+
+
+def cmd_generate_run(args: argparse.Namespace) -> int:
+    from .generate_config import GenerateConfig
+    from .generate_run import run_pipeline
+    from .generate_workspace import GenerateError
+
+    config = GenerateConfig.load(args.config)
+    if not args.yes:
+        print(f"generate {config.job_id}: analyze={config.run_analyze} "
+              f"enrich={config.enrich is not None} "
+              f"materials={config.run_materials} fixtures={config.run_fixtures} "
+              f"pack={config.run_pack}")
+        print(f"  workspace: {config.workspace}")
+        print(f"  spec:      {config.spec}")
+        if config.enrich and config.enrich.use_llm:
+            from .enrich import estimate_enrich_cost
+            from .engine.generate import load_spec
+            est = estimate_enrich_cost(load_spec(config.spec), config.enrich)
+            print(f"  enrich LLM: ~${est.estimated_usd:.4f} on {est.model} "
+                  f"(cap ${est.max_usd:.2f})")
+        if config.run_fixtures:
+            print(f"  staging:   ${config.base_url_env}")
+        if not config.mcp_gateway:
+            print("  note: mcp_gateway=false → A/B arms gated for field HTTP")
+        print("\nRe-run with --yes to execute.")
+        return 1
+
+    try:
+        manifest = run_pipeline(config, yes=True)
+    except GenerateError as e:
+        print(e.message)
+        return e.exit_code
+    print(f"complete: {config.workspace / 'manifest.json'}")
+    print(f"  arms: {', '.join(manifest.get('arms_probe') or [])}")
+    if manifest.get("pack_id"):
+        print(f"  pack: {manifest.get('pack_id')} ({manifest.get('graded_tasks')} graded)")
+    return 0
+
+
+def cmd_generate_enrich(args: argparse.Namespace) -> int:
+    from .bundle import copy_spec_source
+    from .enrich import EnrichPlan, estimate_enrich_cost, parse_enrich_phase, run_enrich
+    from .engine.generate import load_spec
+    from .generate_config import GenerateConfig
+    from .generate_workspace import (
+        GenerateError,
+        init_workspace,
+        read_status,
+        spec_path_in_workspace,
+        workspace_root,
+    )
+
+    if getattr(args, "config", None):
+        config = GenerateConfig.load(args.config)
+        workspace = config.workspace
+        plan = config.enrich or EnrichPlan(model=None, max_usd=0.0, use_llm=False)
+        if read_status(workspace) is None:
+            init_workspace(workspace, config.job_id)
+        dest = spec_path_in_workspace(workspace)
+        if not dest.is_file():
+            copy_spec_source(config.spec, dest)
+    else:
+        workspace = workspace_root(args.out)
+        plan = parse_enrich_phase(
+            {"model": args.model, "max_usd": args.max_usd} if args.model else True
+        )
+        if plan is None:
+            plan = EnrichPlan(model=None, max_usd=0.0, use_llm=False)
+        init_workspace(workspace, args.job_id or workspace.name)
+        dest = spec_path_in_workspace(workspace)
+        if not dest.is_file():
+            if not args.spec:
+                print("spec or --config required")
+                return 2
+            copy_spec_source(args.spec, dest)
+
+    if plan.use_llm and not args.yes:
+        est = estimate_enrich_cost(load_spec(dest), plan)
+        print(f"enrich LLM ~${est.estimated_usd:.4f} on {est.model} "
+              f"(cap ${est.max_usd:.2f})")
+        print("Re-run with --yes to spend.")
+        return 1
+
+    try:
+        summary = run_enrich(workspace, plan=plan, yes=args.yes)
+    except GenerateError as e:
+        print(e.message)
+        return e.exit_code
+    print(f"enriched → {workspace / summary['enriched_spec']}")
+    print(f"  patched: {summary['operations_patched']}  llm={summary['llm_used']}")
+    print(f"  skill:   {workspace / summary['authored_skill']}")
+    print(f"  gaps:    {workspace / summary['doc_gaps']}")
+    return 0
+
+
+def cmd_generate_fixtures(args: argparse.Namespace) -> int:
+    from .generate_config import GenerateConfig
+    from .generate_fixtures import run_fixtures_from_config
+    from .generate_workspace import init_workspace, read_status
+
+    config = GenerateConfig.load(args.config)
+    if read_status(config.workspace) is None:
+        init_workspace(config.workspace, config.job_id)
+    if not args.yes:
+        print(f"fixtures for {config.job_id} need ${config.base_url_env} and --yes")
+        return 1
+    result = run_fixtures_from_config(config)
+    print(f"captured {result.success_count} fixtures → {config.workspace / 'examples'}")
+    return 0
+
+
+def cmd_generate_pack(args: argparse.Namespace) -> int:
+    from .generate_config import GenerateConfig
+    from .generate_pack import run_pack
+    from .generate_workspace import GenerateError, init_workspace, read_status
+
+    config = GenerateConfig.load(args.config)
+    if read_status(config.workspace) is None:
+        init_workspace(config.workspace, config.job_id)
+    if not args.yes:
+        print(f"pack for {config.job_id}: min_graded_tasks={config.min_graded_tasks}")
+        print("Re-run with --yes")
+        return 1
+    try:
+        summary = run_pack(config.workspace, config)
+    except GenerateError as e:
+        print(e.message)
+        return e.exit_code
+    print(f"wrote {config.workspace / summary['pack_path']} "
+          f"({summary['graded_tasks']} graded)")
+    return 0
+
+
+def cmd_mock_serve(args: argparse.Namespace) -> int:
+    """Local HTTP stub + MCP gateway for From-OpenAPI when no staging URL."""
+    from .mock_serve import serve_pair
+
+    serve_pair(
+        str(args.spec),
+        host=args.host,
+        http_port=args.http_port,
+        mcp_port=args.mcp_port,
+    )
+    return 0
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     """Install the agent skills into this project.
 
@@ -1250,13 +1501,14 @@ def cmd_transcript(args: argparse.Namespace) -> int:
     from .engine.transcript import load, render_stored
 
     style = "showcase" if args.pretty else "plain"
+    verbose = bool(getattr(args, "verbose", False))
     paths = (sorted(args.trace.glob("*.json*")) if args.trace.is_dir()
              else [args.trace])
     if not paths:
         print(f"no traces in {args.trace}")
         return 1
     for path in paths[:args.limit]:
-        print(render_stored(load(str(path)), style=style))
+        print(render_stored(load(str(path)), style=style, verbose=verbose))
         print()
     if len(paths) > args.limit:
         print(f"({len(paths) - args.limit} more — raise --limit, or name one file)")
@@ -1330,6 +1582,28 @@ def cmd_report(args: argparse.Namespace) -> int:
         print("\n  contrasts:")
         print(stats.render())
     return 0
+
+
+def cmd_analyze(args: argparse.Namespace) -> int:
+    """Deep-dive tables over a finished results directory. Re-runs nothing."""
+    from .deep_analysis import main as analyze_main
+
+    argv = [str(args.results)]
+    if args.csv:
+        argv.extend(["--csv", str(args.csv)])
+    if args.json is not None:
+        argv.extend(["--json", args.json])
+    if args.only:
+        argv.extend(["--only", args.only])
+    if args.quiet:
+        argv.append("--quiet")
+    if args.sort:
+        argv.extend(["--sort", args.sort])
+    if args.desc:
+        argv.append("--desc")
+    if args.list_columns:
+        argv.append("--list-columns")
+    return analyze_main(argv)
 
 
 def cmd_compare(args: argparse.Namespace) -> int:
@@ -1555,6 +1829,174 @@ def _skip_for_needs(resolved_entry, task) -> bool:
     return False
 
 
+def _experiment_run_namespace(sidecar, store, *, slice_id, yes, concurrency,
+                              disk_reserve_gb=None):
+    """Build a ``run`` namespace from an experiment sidecar."""
+    ns = argparse.Namespace(
+        command="run",
+        func=cmd_run,
+        out=str(sidecar.root),
+        id=sidecar.id,
+        plan=None,
+        presets=list(sidecar.active_presets()),
+        cores=3,
+        fan_out=8,
+        classes=None,
+        max_tasks=None,
+        max_turns=12,
+        seed=1,
+        sweep_error_detail=None,
+        sweep=[],
+        difficulty="standard",
+        concurrency=concurrency,
+        resume=bool(store.manifest() or any(True for _ in store.raw_rows())),
+        yes=yes,
+        preflight=True,
+        smoke=False,
+        stream=False,
+        pack=None,
+        spec=None,
+        probe=False,
+        disk_reserve_gb=disk_reserve_gb,
+        i_know_this_is_production=False,
+        provider="openai",
+        model="gpt-5.6-luna",
+        reasoning_effort="low",
+        temperature=0.0,
+        caching="off",
+        repeats=1,
+        surface_size=0,
+        schema_detail="standard",
+        response_shape="as-is",
+        error_detail="field-scoped",
+        doc_budget="standard",
+        mcp_revision="2026-07-28",
+        experiment_slice=slice_id,
+    )
+    _apply_run_plan_to_args(ns, sidecar.run_plan())
+    ns._plan = sidecar.run_plan()
+    return ns
+
+
+def cmd_experiment_init(args: argparse.Namespace) -> int:
+    from .engine.experiment_sidecar import ExperimentSidecar
+
+    out = Path(args.out)
+    sidecar = ExperimentSidecar.init_from_plan(Path(args.plan), out)
+    print(f"experiment sidecar: {out / 'experiment.yaml'}")
+    print(f"  id: {sidecar.id}")
+    print(f"  arms: {', '.join(sidecar.active_presets())}")
+    print(f"  next: harness experiment run {out}")
+    return 0
+
+
+def cmd_experiment_show(args: argparse.Namespace) -> int:
+    from .engine.experiment_sidecar import ExperimentSidecar, sidecar_envelope
+    from .engine.results import ResultStore
+    from .study import resolve_tasks
+
+    sidecar = ExperimentSidecar.load(args.dir)
+    store = ResultStore(args.dir)
+    tasks = resolve_tasks(sidecar.run_plan(), manifest=store.manifest() or None)
+    payload = sidecar_envelope(sidecar, store, tasks=tasks,
+                               slice_id=getattr(args, "slice", None))
+    print(json.dumps(payload, indent=2, default=str))
+    return 0
+
+
+def cmd_experiment_arm_add(args: argparse.Namespace) -> int:
+    from .engine.experiment_sidecar import ExperimentSidecar
+
+    sidecar = ExperimentSidecar.load(args.dir)
+    added = sidecar.add_presets(args.presets)
+    if not added:
+        print("no new arms added")
+    else:
+        print(f"added: {', '.join(added)}")
+        print(f"  active arms: {', '.join(sidecar.active_presets())}")
+    return 0
+
+
+def cmd_experiment_status(args: argparse.Namespace) -> int:
+    from .engine.experiment_sidecar import ExperimentSidecar, coverage_summary
+    from .engine.results import ResultStore
+    from .study import resolve_tasks
+
+    sidecar = ExperimentSidecar.load(args.dir)
+    store = ResultStore(args.dir)
+    sidecar.validate_world_lock(store)
+    plan = sidecar.run_plan()
+    tasks = resolve_tasks(plan, manifest=store.manifest() or None)
+    cov = coverage_summary(
+        store,
+        presets=sidecar.active_presets(),
+        tasks=tasks,
+        repeats=int(plan.base.get("repeats", 1)),
+        slice_spec=sidecar.slice_spec(getattr(args, "slice", None)),
+    )
+    print(f"experiment {sidecar.id}  status={sidecar.status}")
+    print(f"  declared:  {cov['declared_cells']} cells")
+    print(f"  completed: {cov['completed_cells']}")
+    print(f"  missing:   {cov['missing_cells']}")
+    print(f"  voided:    {cov['voided_cells']}")
+    if cov["complete_fraction"] is not None:
+        print(f"  coverage:  {cov['complete_fraction']:.1%}")
+    incomplete = {k: v for k, v in cov["by_arm"].items() if v["missing"]}
+    if incomplete:
+        print("  incomplete arms:")
+        for arm, stats in sorted(incomplete.items()):
+            print(f"    {arm}: {stats['done']}/{stats['expected']}")
+    return 0
+
+
+def cmd_experiment_run(args: argparse.Namespace) -> int:
+    from .engine.experiment_sidecar import ExperimentSidecar
+    from .engine.results import ResultStore
+
+    sidecar = ExperimentSidecar.load(args.dir)
+    store = ResultStore(args.dir)
+    run_ns = _experiment_run_namespace(
+        sidecar, store,
+        slice_id=args.slice,
+        yes=args.yes,
+        concurrency=args.concurrency,
+        disk_reserve_gb=getattr(args, "disk_reserve_gb", None),
+    )
+    return cmd_run(run_ns)
+
+
+def cmd_experiment_snapshot(args: argparse.Namespace) -> int:
+    from .engine.experiment_sidecar import REPORTS_DIR, ExperimentSidecar
+    from .engine.results import ResultStore
+    from .engine.reporting import render
+
+    sidecar = ExperimentSidecar.load(args.dir)
+    store = ResultStore(args.dir)
+    rows = list(store.rows())
+    manifest = store.manifest()
+    report = _build_report(store)
+    report_json = {
+        "at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "status": sidecar.status,
+        "ledger_rows": sum(1 for _ in store.raw_rows()),
+        "text": render(rows, manifest, report=report),
+    }
+    reports = sidecar.root / REPORTS_DIR
+    reports.mkdir(exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%S")
+    name = f"{stamp}-{sidecar.status}.json"
+    path = reports / name
+    path.write_text(json.dumps(report_json, indent=2, default=str))
+    sidecar.append_report_snapshot({
+        "at": report_json["at"],
+        "status": sidecar.status,
+        "path": f"{REPORTS_DIR}/{name}",
+        "ledger_rows": report_json["ledger_rows"],
+    })
+    print(f"snapshot: {path}")
+    return 0
+
+
 def _progress(done: int, total: int, started_at: float) -> str:
     """`[ 42/270  16%  eta 21m]` — position, share, and time remaining.
 
@@ -1657,6 +2099,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--resume", action="store_true",
                        help="skip runs already in the results directory")
     run_p.add_argument("--yes", action="store_true", help="skip the spend prompt")
+    run_p.add_argument("--disk-reserve-gb", type=float, default=None, metavar="GB",
+                       help="swap headroom required before starting (default 5 for "
+                            "full matrices; 0 for --smoke, --probe, and experiment "
+                            "smoke slices)")
     run_p.add_argument("--no-preflight", dest="preflight", action="store_false",
                        help="skip the one-completion check that the key and "
                             "model work before scheduling the matrix")
@@ -1700,6 +2146,28 @@ def build_parser() -> argparse.ArgumentParser:
                                "time=.10'. Unnamed dimensions are dropped, not "
                                "defaulted")
     report_p.set_defaults(func=cmd_report)
+
+    analyze_p = sub.add_parser(
+        "analyze",
+        help="deep-dive tables over a finished results directory (free)",
+    )
+    analyze_p.add_argument("results", nargs="?", default="results",
+                           help="results directory (default: results)")
+    analyze_p.add_argument("--csv", type=Path, metavar="DIR",
+                           help="write one CSV per section")
+    analyze_p.add_argument("--json", metavar="PATH",
+                           help="write JSON envelope (use - for stdout)")
+    analyze_p.add_argument("--only", metavar="KEYS",
+                           help="comma-separated section keys")
+    analyze_p.add_argument("--quiet", action="store_true",
+                           help="suppress console tables")
+    analyze_p.add_argument("--sort", metavar="COLUMN",
+                           help="sort the wide per-arm table by this column")
+    analyze_p.add_argument("--desc", action="store_true",
+                           help="sort descending")
+    analyze_p.add_argument("--list-columns", action="store_true",
+                           help="print sortable column names and exit")
+    analyze_p.set_defaults(func=cmd_analyze)
 
     cmp_p = sub.add_parser(
         "compare",
@@ -1753,6 +2221,69 @@ def build_parser() -> argparse.ArgumentParser:
                       help="treat an http source as OpenAPI, not an MCP server")
     sc_p.set_defaults(func=cmd_scaffold)
 
+    gen_p = sub.add_parser("generate", help="OpenAPI → materials bundle (field/onboarding)")
+    gen_sub = gen_p.add_subparsers(dest="generate_command", required=True)
+
+    gen_an = gen_sub.add_parser("analyze", help="lint spec → workspace analyze.json")
+    gen_an.add_argument("spec", type=Path)
+    gen_an.add_argument("-o", "--out", type=Path, required=True,
+                        help="generate workspace directory")
+    gen_an.add_argument("--job-id", default=None)
+    gen_an.set_defaults(func=cmd_generate_analyze)
+
+    gen_mat = gen_sub.add_parser("materials", help="mechanical tools/docs/code → materials/")
+    gen_mat.add_argument("spec", type=Path,
+                         help="OpenAPI file (or ignored if workspace has spec/)")
+    gen_mat.add_argument("-o", "--out", type=Path, required=True)
+    gen_mat.add_argument("--job-id", default=None)
+    gen_mat.add_argument("--doc-budget", default="standard",
+                         choices=[c.value for c in DocBudget])
+    gen_mat.add_argument("--presets", nargs="*", default=None)
+    gen_mat.set_defaults(func=cmd_generate_materials)
+
+    gen_en = gen_sub.add_parser("enrich", help="heuristic/LLM enrich → enriched spec + authored skill")
+    gen_en.add_argument("spec", type=Path, nargs="?", default=None,
+                        help="OpenAPI file (or use --config)")
+    gen_en.add_argument("-o", "--out", type=Path, default=None,
+                        help="workspace (required without --config)")
+    gen_en.add_argument("--config", type=Path, default=None)
+    gen_en.add_argument("--job-id", default=None)
+    gen_en.add_argument("--model", default=None, help="enable LLM enrich with this model")
+    gen_en.add_argument("--max-usd", type=float, default=2.0)
+    gen_en.add_argument("--yes", action="store_true")
+    gen_en.set_defaults(func=cmd_generate_enrich)
+
+    gen_run = gen_sub.add_parser("run", help="run phases from generate.config.yaml")
+    gen_run.add_argument("config", type=Path)
+    gen_run.add_argument("--yes", action="store_true",
+                         help="skip confirmation (required for unattended/BE)")
+    gen_run.set_defaults(func=cmd_generate_run)
+
+    gen_fix = gen_sub.add_parser("fixtures", help="capture staging read fixtures")
+    gen_fix.add_argument("config", type=Path)
+    gen_fix.add_argument("--yes", action="store_true")
+    gen_fix.set_defaults(func=cmd_generate_fixtures)
+
+    gen_pack = gen_sub.add_parser("pack", help="build graded pack from fixtures")
+    gen_pack.add_argument("config", type=Path)
+    gen_pack.add_argument("--yes", action="store_true")
+    gen_pack.set_defaults(func=cmd_generate_pack)
+
+    mock_p = sub.add_parser(
+        "mock",
+        help="local OpenAPI HTTP stub + MCP gateway (no customer staging URL)",
+    )
+    mock_sub = mock_p.add_subparsers(dest="mock_command", required=True)
+    mock_serve = mock_sub.add_parser(
+        "serve",
+        help="bind HTTP mock + MCP gateway; print MOCK_READY JSON line",
+    )
+    mock_serve.add_argument("--spec", type=Path, required=True)
+    mock_serve.add_argument("--host", default="127.0.0.1")
+    mock_serve.add_argument("--http-port", type=int, default=0)
+    mock_serve.add_argument("--mcp-port", type=int, default=0)
+    mock_serve.set_defaults(func=cmd_mock_serve)
+
     init_p = sub.add_parser("init",
                             help="install the agent skills into this project")
     init_p.add_argument("--agent", default="both",
@@ -1771,6 +2302,9 @@ def build_parser() -> argparse.ArgumentParser:
     tr_p.add_argument("--pretty", action="store_true",
                       help="showcase layout (same as live --stream): unwrap "
                            "MCP envelopes, key/value args, highlight answers")
+    tr_p.add_argument("--verbose", action="store_true",
+                      help="with --pretty: expand collapsed preamble, packaging "
+                           "material, and truncated code blocks")
     tr_p.set_defaults(func=cmd_transcript)
 
     arms_p = sub.add_parser("arms", help="list resolved arms (axes, method, description)")
@@ -1786,6 +2320,43 @@ def build_parser() -> argparse.ArgumentParser:
     plan_p.add_argument("--strict", action="store_true",
                         help="require a pre-registered confirmatory/exploratory split")
     plan_p.set_defaults(func=cmd_plan)
+
+    exp_p = sub.add_parser("experiment", help="experiment sidecar lifecycle")
+    exp_sub = exp_p.add_subparsers(dest="experiment_command", required=True)
+
+    exp_init = exp_sub.add_parser("init", help="write experiment.yaml from a plan")
+    exp_init.add_argument("plan", type=Path)
+    exp_init.add_argument("--out", type=Path, required=True)
+    exp_init.set_defaults(func=cmd_experiment_init)
+
+    exp_show = exp_sub.add_parser("show", help="JSON envelope for adapter/UI")
+    exp_show.add_argument("dir", type=Path)
+    exp_show.add_argument("--slice")
+    exp_show.set_defaults(func=cmd_experiment_show)
+
+    exp_arm = exp_sub.add_parser("arm", help="mutate declared arms")
+    exp_arm_sub = exp_arm.add_subparsers(dest="arm_command", required=True)
+    exp_arm_add = exp_arm_sub.add_parser("add", help="append presets to declaration")
+    exp_arm_add.add_argument("dir", type=Path)
+    exp_arm_add.add_argument("presets", nargs="+")
+    exp_arm_add.set_defaults(func=cmd_experiment_arm_add)
+
+    exp_status = exp_sub.add_parser("status", help="coverage summary")
+    exp_status.add_argument("dir", type=Path)
+    exp_status.add_argument("--slice")
+    exp_status.set_defaults(func=cmd_experiment_status)
+
+    exp_run = exp_sub.add_parser("run", help="run missing cells only")
+    exp_run.add_argument("dir", type=Path)
+    exp_run.add_argument("--slice")
+    exp_run.add_argument("--yes", action="store_true")
+    exp_run.add_argument("--concurrency", type=int, default=16)
+    exp_run.add_argument("--disk-reserve-gb", type=float, default=None, metavar="GB")
+    exp_run.set_defaults(func=cmd_experiment_run)
+
+    exp_snap = exp_sub.add_parser("snapshot", help="freeze a dated report snapshot")
+    exp_snap.add_argument("dir", type=Path)
+    exp_snap.set_defaults(func=cmd_experiment_snapshot)
 
     for sp in (plan_p, run_p):
         sp.add_argument("--provider", default="openai")

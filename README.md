@@ -95,6 +95,9 @@ harness run --pack packs/your-api.yaml --probe                    # ~$1–20
 harness report results/… --html report.html
 ```
 
+From an OpenAPI doc (materials + fixtures + pack), see `harness generate --help`
+and the harness-ui From-OpenAPI wizard. Local stub: `harness mock serve`.
+
 `scaffold` writes one task stub per read operation, puts every operation it
 won't exercise into `forbidden_calls`, and leaves every task **ungraded on
 purpose** — a stub that asserted something plausible would look finished.

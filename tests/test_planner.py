@@ -152,10 +152,21 @@ def test_justified_rule_is_labelled_measured() -> None:
 
 
 def test_scorecard_footer_states_how_much_is_measured() -> None:
-    register(Rule(id="z-demo", severity=Severity.LOW, summary="s",
-                  check=lambda spec: []))
-    card = scorecard(None)
-    assert "heuristic" in card.footer()
+    from harness.engine.lint import _REGISTRY
+
+    # Other tests register the built-in rules into this module-level dict and
+    # leave them there. scorecard(None) would then walk those checks, which
+    # expect an ApiSpec — isolate so this assertion is order-independent.
+    saved = dict(_REGISTRY)
+    _REGISTRY.clear()
+    try:
+        register(Rule(id="z-demo", severity=Severity.LOW, summary="s",
+                      check=lambda spec: []))
+        card = scorecard(None)
+        assert "heuristic" in card.footer()
+    finally:
+        _REGISTRY.clear()
+        _REGISTRY.update(saved)
 
 
 # ---- packaging -----------------------------------------------------------

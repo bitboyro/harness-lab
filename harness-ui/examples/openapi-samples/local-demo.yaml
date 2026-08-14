@@ -1,0 +1,91 @@
+openapi: 3.0.3
+info:
+  title: Local Demo Catalog
+  version: "1.0.0"
+  description: Tiny in-process demo API for harness-ui generate e2e.
+servers:
+  - url: http://127.0.0.1:8765
+paths:
+  /health:
+    get:
+      operationId: get_health
+      summary: Liveness
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+  /items:
+    get:
+      operationId: list_items
+      summary: List catalog items
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+  /items/{item_id}:
+    get:
+      operationId: get_item
+      summary: Get one item
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+  /studios:
+    get:
+      operationId: list_studios
+      summary: List studios
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+  /studios/{studio_id}:
+    get:
+      operationId: get_studio
+      summary: Get one studio
+      parameters:
+        - name: studio_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+  /search:
+    get:
+      operationId: search_catalog
+      summary: Search titles
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
