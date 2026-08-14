@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Local throwaway helpers for baseline-experiment-80 (gitignored under /scripts/).
+# Local throwaway helpers for baseline-experiment-80.
 #
 #   ./scripts/baseline-experiment-80.sh bait          # write pack.yaml at bait path
 #   ./scripts/baseline-experiment-80.sh smoke-c1      # C1 only (bash+docs, no cheat) + transcript
@@ -11,6 +11,7 @@
 # memory and does not dump gold answers to disk (C/D arms can read absolute
 # paths). Z-cheat needs the file on purpose — place it here before any Z-cheat
 # cell runs. C1 is the same DocsShell transport with normal curl docs (no bait).
+# smoke-zcheat writes a 2-core bait so it matches `--smoke`; full uses CORES.
 set -euo pipefail
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
@@ -101,8 +102,11 @@ cmd_smoke_c1() {
 }
 
 cmd_smoke_zcheat() {
-  write_bait_pack
+  # --smoke caps cores at 2 and max_tasks at 4; the bait pack must be built
+  # from that same world or cheating reads gold for a different catalog.
+  local smoke_cores=2
   local smoke_out="${SMOKE_OUT:-results/z-cheat-smoke}"
+  CORES="$smoke_cores" write_bait_pack
   echo "==> Z-cheat smoke → $smoke_out"
   "$HARNESS" run --plan "$PLAN" \
     --presets Z-cheat \

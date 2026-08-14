@@ -126,6 +126,29 @@ def test_build_ledger_excludes_z0_and_ranks_stumble_with_gold(tmp_path) -> None:
     assert misuse[0].calls == 1
 
 
+def test_correct_refusal_is_not_a_failed_run_for_op_association(tmp_path) -> None:
+    """Outcome token is correct-refusal; 'abstain' is only a display label."""
+    traces = tmp_path / "traces"
+    traces.mkdir()
+    _write_trace(traces, "a1.json", {
+        "run_id": "a1", "task_id": "u1",
+        "variant": {"transport": "mcp", "discovery": "eager-all",
+                    "invocation": "tool-call", "preset": "A1"},
+        "calls": [
+            {"call": {"tool": "get_episode", "args": {"id": "e1"}},
+             "result": {"status": 200}, "forbidden": False},
+        ],
+    })
+    rows = [
+        {"run_id": "a1", "arm": "A1", "task_id": "u1",
+         "outcome": "correct-refusal", "answerable": False,
+         "task_class": "R", "core_id": "c0"},
+    ]
+    ledger = build_ledger(rows, traces)
+    assert ledger.calls
+    assert all(not c.run_failed for c in ledger.calls)
+
+
 def test_excess_usage_vs_gold(tmp_path) -> None:
     traces = tmp_path / "traces"
     traces.mkdir()
