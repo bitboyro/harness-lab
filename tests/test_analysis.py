@@ -149,6 +149,18 @@ def test_declined_but_clobbered_is_not_a_true_negative() -> None:
     assert arm.harm_events == 1
 
 
+def test_html_surfaces_declined_clobbered_in_confusion() -> None:
+    """Rates already fold DC in; the 2x2 table used to omit it entirely."""
+    rows = [
+        dict(BASE, outcome="correct-refusal", answerable=False),
+        dict(BASE, outcome="declined-but-clobbered", answerable=False,
+             clobbered=["$.episodes.ep_1.rating"]),
+    ]
+    html = render_html(_report(rows))
+    assert ">DC<" in html or "declined but clobbered" in html.lower()
+    assert "declined+wrote" in html or ">1</td>" in html
+
+
 def test_below_mde_flags_small_differences() -> None:
     rows = [dict(BASE, arm="Z0", outcome="fail", mcp_spec_revision=None),
             dict(BASE, arm="A1", outcome="pass")]

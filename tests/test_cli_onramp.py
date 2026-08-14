@@ -126,3 +126,22 @@ def test_profiles_pick_arms_without_overriding_an_explicit_choice(
     chosen = build_parser().parse_args(["run", profile, "--presets", "B1"])
     apply(chosen)
     assert chosen.presets == ["B1"], "an explicit --presets must win"
+
+
+def test_smoke_with_plan_keeps_smoke_cost_envelope() -> None:
+    """Plan base.repeats must not undo --smoke after looking like a CLI default."""
+    from harness.cli import (
+        _apply_plan, _apply_smoke_profile, _pin_profile_envelopes, build_parser,
+    )
+
+    args = build_parser().parse_args([
+        "run", "--smoke", "--plan", "plans/baseline-experiment-80.yaml",
+        "--presets", "Z-cheat",
+    ])
+    _apply_smoke_profile(args)
+    _apply_plan(args)
+    _pin_profile_envelopes(args)
+    assert args.repeats == 1
+    assert args.cores == 2
+    assert args.max_tasks == 4
+    assert args.presets == ["Z-cheat"]

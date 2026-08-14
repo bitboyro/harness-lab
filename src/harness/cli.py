@@ -285,6 +285,23 @@ def _apply_smoke_profile(args: argparse.Namespace) -> None:
     args.repeats = 1
 
 
+def _pin_profile_envelopes(args: argparse.Namespace) -> None:
+    """Re-apply smoke/probe cost caps after a plan overlay.
+
+    Profiles run before ``_apply_plan`` so empty ``--presets`` stay on the
+    profile defaults. Plan merge keys off argparse defaults, so smoke's
+    ``repeats=1`` looks unset and a plan with ``repeats: 3`` quietly triples
+    a five-cent check. Caps always win once more after the overlay.
+    """
+    if getattr(args, "smoke", False):
+        args.cores = min(args.cores, 2)
+        args.max_tasks = args.max_tasks or 4
+        args.repeats = 1
+    if getattr(args, "probe", False):
+        args.repeats = 1
+        args.resume = False
+
+
 def _apply_probe_profile(args: argparse.Namespace) -> None:
     """``--probe``: first contact with a target, not a benchmark.
 
@@ -746,6 +763,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.probe:
         _apply_probe_profile(args)
     _apply_plan(args)
+    _pin_profile_envelopes(args)
 
     # Priced before anything is created. `ResultStore.__init__` mkdirs, so
     # validating after it means a rejected run still leaves a results directory

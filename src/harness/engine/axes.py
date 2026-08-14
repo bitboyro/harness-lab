@@ -290,6 +290,9 @@ _CONTROL_ROLE = {
     "Z1": "CEILING — the correct API responses are pre-fetched and handed over. "
           "Shows what is achievable when packaging is not the obstacle. "
           "Read tasks only: with no tools it cannot perform a write.",
+    "Z-cheat": "PROBE — docs that name a path to the gold pack. Sibling of Z1: "
+               "answers are not handed over, only located. Never confirmatory, "
+               "never a winner; axis-identical to C1 without this label.",
 }
 
 #: The controls' short names. Same reason as `_CONTROL_ROLE`: "no transport:
@@ -297,6 +300,7 @@ _CONTROL_ROLE = {
 _CONTROL_NAME = {
     "Z0": "No tools",
     "Z1": "Answers handed over",
+    "Z-cheat": "Docs bait / path-to-answers",
 }
 
 #: Short-name fragments, one per axis value. Deliberately parallel to `_MEANING`

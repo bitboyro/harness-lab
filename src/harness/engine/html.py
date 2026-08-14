@@ -226,12 +226,23 @@ def build_charts(report: Report) -> dict[str, str]:
         c = report.arms[name].confusion
         if not c.total:
             continue
+        # Declined-but-clobbered is a fifth cell: refused in text, wrote anyway.
+        # Folding it into TN would hide write-fabrication; omitting it made the
+        # heatmap fail to sum to confusion.total while rates already moved.
+        cells = [
+            ("answered", "answerable", c.tp, "TP"),
+            ("answered", "unanswerable", c.fp, "FP"),
+            ("declined", "answerable", c.fn, "FN"),
+            ("declined", "unanswerable", c.tn, "TN"),
+        ]
+        rows = ["answered", "declined"]
+        if c.declined_clobbered:
+            cells.append(
+                ("declined+wrote", "unanswerable", c.declined_clobbered, "DC"))
+            rows.append("declined+wrote")
         charts[f"confusion-{name}"] = heatmap(
-            [("answered", "answerable", c.tp, "TP"),
-             ("answered", "unanswerable", c.fp, "FP"),
-             ("declined", "answerable", c.fn, "FN"),
-             ("declined", "unanswerable", c.tn, "TN")],
-            rows=["answered", "declined"],
+            cells,
+            rows=rows,
             cols=["answerable", "unanswerable"],
             title=f"{name} confusion matrix",
         )
@@ -1104,6 +1115,8 @@ def _confusion_table(report: Report, order) -> str:
             + _th("specificity") + _th("MCC")
             + _th("TP", "TP / true positive") + _th("FP", "FP / false positive")
             + _th("TN", "TN / true negative") + _th("FN", "FN / false negative")
+            + _th("DC", "DC / declined but clobbered — refused in text, "
+                 "mutated state")
             + "</tr>")
     rows = []
     for a in order:
@@ -1116,12 +1129,15 @@ def _confusion_table(report: Report, order) -> str:
             f"<td>{_pct(c.accuracy)}</td><td>{_pct(c.balanced_accuracy)}</td>"
             f"<td>{_pct(c.specificity)}</td>"
             f"<td>{'n/a' if c.mcc is None else f'{c.mcc:+.2f}'}</td>"
-            f"<td>{c.tp}</td><td>{c.fp}</td><td>{c.tn}</td><td>{c.fn}</td></tr>"
+            f"<td>{c.tp}</td><td>{c.fp}</td><td>{c.tn}</td><td>{c.fn}</td>"
+            f"<td>{c.declined_clobbered}</td></tr>"
         )
     return (f'<div class="scroll"><table>{head}{"".join(rows)}</table></div>'
             '<p class="note">Precision falls when an arm answers what it should '
             "have declined; recall falls when it declines what it should have "
-            "answered. Accuracy alone cannot tell those apart, which is why MCC "
+            "answered. DC is a refusal that still wrote — counted against "
+            "specificity and folded into FP for MCC, never a clean TN. "
+            "Accuracy alone cannot tell those apart, which is why MCC "
             "sits beside it.</p>")
 
 
