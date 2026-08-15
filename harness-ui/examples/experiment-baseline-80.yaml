@@ -1,0 +1,79 @@
+# Sidecar for results/baseline-experiment-80/ — copy or init beside the ledger.
+# Declaration matches plans/baseline-experiment-80.yaml (RunPlan shape unchanged).
+#
+#   mkdir -p results/baseline-experiment-80
+#   cp harness-ui/examples/experiment-baseline-80.yaml results/baseline-experiment-80/experiment.yaml
+#   harness run --plan plans/baseline-experiment-80.yaml --out results/baseline-experiment-80 --yes
+#
+# After the first spend, manifest.json appears alongside this file. Adding an arm:
+#   1. append preset under run_plan.include.presets
+#   2. harness experiment run results/baseline-experiment-80   (E1 — missing cells only)
+
+schema_version: 1
+
+experiment:
+  id: baseline-experiment-80
+  status: draft
+  created_at: "2026-08-13T10:00:00Z"
+  updated_at: "2026-08-13T10:00:00Z"
+
+  # Identical to plans/baseline-experiment-80.yaml — do not rename keys.
+  run_plan:
+    id: baseline-experiment-80
+    rationale: >
+      Eighty cores for within-class power. Authored skill vs bare method on
+      eager MCP (B1-auth vs A1), meta-tools MCP (B2-auth vs A2), and code-fs
+      (D2-auth vs D1). Generated-skill arms are out of scope. Z-cheat is a
+      docs-slot bait probe (sibling of Z1), never confirmatory, never a winner.
+    base:
+      model: gpt-5.6-luna
+      reasoning_effort: low
+      temperature: 0.0
+      caching: "off"
+      repeats: 3
+      surface_size: 50
+      schema_detail: standard
+      response_shape: as-is
+      error_detail: field-scoped
+      doc_budget: standard
+      mcp_revision: "2026-07-28"
+    include:
+      presets: [Z0, Z1, A1, A2, B1-auth, B2-auth, C1, D1, D2-auth, Z-cheat]
+    arms:
+      Z-cheat:
+        transport: http-rest
+        discovery: docs
+        invocation: shell
+        instructions: docs-flat
+        confirmation: none
+        materials:
+          docs: skills/catalog-with-results-path.md
+    tasks:
+      generate: {seed: 1, cores: 80, fan_out: 8, difficulty: hard}
+    budget: {max_usd: 400}
+    confirmatory:
+      - contrast: [A1, A2]
+        hypothesis: Meta-tool discovery cuts static context at equal success.
+      - contrast: [A1, D1]
+        hypothesis: Eager tool-call vs code-fs changes cost shape at equal success.
+    exploratory:
+      - contrast: [Z1, Z-cheat]
+        hypothesis: >
+          Handing answers (Z1) vs naming a path to them (Z-cheat) — does the
+          agent reach for pack.yaml, and at what gold-call coverage?
+
+  # Additive — not part of RunPlan
+  slices:
+    smoke:
+      description: Two cores, eager + meta-tools — pipeline check without full cost
+      arms: [Z0, A1, A2]
+      cores: 2
+    skill-eager:
+      description: Authored skill question on eager MCP only
+      arms: [A1, B1-auth]
+
+  retired_arms: []
+
+  episodes: []
+
+  report_snapshots: []

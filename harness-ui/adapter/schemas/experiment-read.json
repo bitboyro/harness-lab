@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bitboy.ro/harness-ui/schemas/experiment-read.json",
+  "title": "Adapter experiment read envelope",
+  "description": "Output of harness_json.py experiment read DIR. Declarative fields mirror experiment.yaml; coverage comes from ResultStore.",
+  "type": "object",
+  "required": ["harness_version", "schema_version", "experiment", "ledger", "coverage"],
+  "additionalProperties": false,
+  "properties": {
+    "harness_version": { "type": "string" },
+    "schema_version": { "type": "integer", "const": 1 },
+    "experiment": {
+      "type": "object",
+      "required": ["id", "status", "created_at", "updated_at"],
+      "properties": {
+        "id": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "active", "paused", "complete", "archived"]
+        },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "run_plan": { "type": "object" },
+        "plan": { "type": "string" },
+        "slices": { "type": "object", "additionalProperties": true },
+        "retired_arms": { "type": "array", "items": { "type": "string" } },
+        "episodes": { "type": "array" },
+        "report_snapshots": { "type": "array" }
+      }
+    },
+    "ledger": {
+      "type": "object",
+      "required": ["dir", "has_manifest", "row_count"],
+      "properties": {
+        "dir": { "type": "string" },
+        "has_manifest": { "type": "boolean" },
+        "has_experiment_sidecar": { "type": "boolean" },
+        "row_count": { "type": "integer", "minimum": 0 },
+        "manifest_id": { "type": ["string", "null"] }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": ["declared_cells", "completed_cells", "missing_cells", "voided_cells"],
+      "properties": {
+        "declared_cells": { "type": "integer", "minimum": 0 },
+        "completed_cells": { "type": "integer", "minimum": 0 },
+        "missing_cells": { "type": "integer", "minimum": 0 },
+        "voided_cells": { "type": "integer", "minimum": 0 },
+        "complete_fraction": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "by_arm": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "done": { "type": "integer" },
+              "expected": { "type": "integer" },
+              "missing": { "type": "integer" }
+            }
+          }
+        },
+        "incomplete_arms": { "type": "object", "additionalProperties": true }
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+# Run from harness-ui/:
+#   docker compose up --build
+#
+# Build context is the repo root so the image can COPY root install.py.
+# Provider keys come from the repo-root .env (same file the CLI loads).
+
+services:
+  harness-ui:
+    build:
+      context: ..
+      dockerfile: harness-ui/Dockerfile
+      args:
+        HARNESS_VERSION: ${HARNESS_VERSION:-v0.0.1}
+    image: harness-ui:local
+    ports:
+      - "127.0.0.1:8085:8085"
+    env_file:
+      # Repo-root .env (same names the CLI loads). Optional so `compose config`
+      # works before credentials exist; runs that call a model still need it.
+      - path: ../.env
+        required: false
+    environment:
+      SERVER_PORT: "8085"
+      # Spring binds harness.data ← HARNESS_DATA (generate + secrets under here).
+      HARNESS_DATA: /data
+    volumes:
+      # Includes generate/, secrets/, targets/, packs/, results/, jobs/
+      - ./harness-data:/data

@@ -1,0 +1,36 @@
+# Nested — root .gitignore stays untouched (plan constraint).
+
+# Java / Maven
+api/target/
+api/.mvn/wrapper/maven-wrapper.jar
+**/.idea/
+*.iml
+.classpath
+.project
+.settings/
+
+# Node / Next
+web/node_modules/
+web/.next/
+web/out/
+web/.turbo/
+npm-debug.log*
+yarn-error.log*
+
+# Python adapter
+adapter/**/__pycache__/
+adapter/.pytest_cache/
+adapter/.venv/
+*.pyc
+
+# Local workspace mount (compose)
+harness-data/
+.env
+*.log
+
+# OS / editor
+.DS_Store
+
+# Built Next export (from web/out). Docker / local copy regenerates this.
+api/src/main/resources/static/**
+!api/src/main/resources/static/index.html

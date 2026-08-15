@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "harness-ui/adapter/lint",
+  "title": "AdapterLint",
+  "type": "object",
+  "required": [
+    "harness_version",
+    "findings",
+    "rules_run",
+    "rules_measured",
+    "measured_fraction",
+    "footer"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "harness_version": { "type": "string" },
+    "spec_path": { "type": "string" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rule_id", "severity", "confidence", "message"],
+        "properties": {
+          "rule_id": { "type": "string" },
+          "severity": { "type": "string", "enum": ["high", "medium", "low"] },
+          "confidence": { "type": "string", "enum": ["measured", "heuristic"] },
+          "message": { "type": "string" },
+          "location": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "rules_run": { "type": "integer" },
+    "rules_measured": { "type": "integer" },
+    "measured_fraction": { "type": "number" },
+    "footer": { "type": "string" }
+  }
+}

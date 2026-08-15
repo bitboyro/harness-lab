@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bitboy.ro/harness-ui/schemas/experiment-coverage.json",
+  "title": "Adapter experiment coverage envelope",
+  "type": "object",
+  "required": ["harness_version", "experiment_id", "status", "coverage"],
+  "properties": {
+    "harness_version": { "type": "string" },
+    "experiment_id": { "type": "string" },
+    "status": { "type": "string" },
+    "slice": { "type": ["string", "null"] },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "declared_cells",
+        "completed_cells",
+        "missing_cells",
+        "voided_cells"
+      ],
+      "properties": {
+        "declared_cells": { "type": "integer", "minimum": 0 },
+        "completed_cells": { "type": "integer", "minimum": 0 },
+        "missing_cells": { "type": "integer", "minimum": 0 },
+        "voided_cells": { "type": "integer", "minimum": 0 },
+        "complete_fraction": { "type": ["number", "null"] },
+        "by_arm": { "type": "object" }
+      }
+    }
+  }
+}

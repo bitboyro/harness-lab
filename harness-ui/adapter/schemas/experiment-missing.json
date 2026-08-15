@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bitboy.ro/harness-ui/schemas/experiment-missing.json",
+  "title": "Adapter experiment missing cells envelope",
+  "type": "object",
+  "required": ["harness_version", "experiment_id", "missing_cells", "cells"],
+  "properties": {
+    "harness_version": { "type": "string" },
+    "experiment_id": { "type": "string" },
+    "slice": { "type": ["string", "null"] },
+    "missing_cells": { "type": "integer", "minimum": 0 },
+    "cells": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["arm", "task_id", "repeat"],
+        "properties": {
+          "arm": { "type": "string" },
+          "task_id": { "type": "string" },
+          "repeat": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

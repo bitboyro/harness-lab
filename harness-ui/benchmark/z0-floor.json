@@ -1,0 +1,12 @@
+{
+  "pack_id": "harness-ui-self",
+  "preset": "Z0",
+  "recorded_at": null,
+  "note": "Fill after: harness run --pack benchmark/harness-ui-self.yaml --presets Z0 --probe --yes",
+  "metrics": {
+    "task_success_rate": null,
+    "fabrication_rate": null,
+    "forbidden_call_attempts": null
+  },
+  "validation": "unvalidated"
+}

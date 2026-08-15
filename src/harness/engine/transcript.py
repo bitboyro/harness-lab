@@ -271,17 +271,20 @@ def _call(record: CallRecord) -> str:
 # ---- showcase (live --stream) ----------------------------------------------
 
 def _showcase_message(msg: dict[str, Any], *, summarise: bool = False,
+                      verbose: bool = False,
                       color: _Color) -> str | None:
     role = str(msg.get("role", "?"))
     content = msg.get("content")
     text = content if isinstance(content, str) else _body(content)
 
     if role == "system":
-        if summarise and len(text) > _ELIDE:
-            return color.dim(f"  system   [{len(text):,} chars of packaging material]")
-        if text.startswith(_PREAMBLE_HINT) or len(text) > 240:
-            return color.dim("  system   [task preamble]")
-        return color.dim(_indent(_clip(text, 160), "system"))
+        if not verbose:
+            if summarise and len(text) > _ELIDE:
+                return color.dim(f"  system   [{len(text):,} chars of packaging material]")
+            if text.startswith(_PREAMBLE_HINT) or len(text) > 240:
+                return color.dim("  system   [task preamble]")
+        limit = 50_000 if verbose else 160
+        return color.dim(_indent(_clip(text, limit), "system"))
 
     if role == "user":
         # Tool-result echoes that slipped through: hide in showcase (shown under
@@ -341,16 +344,18 @@ def _showcase_assistant(text: str | None, *, has_calls: bool,
     return out
 
 
-def _showcase_call(record: CallRecord, color: _Color) -> str:
+def _showcase_call(record: CallRecord, color: _Color, *, verbose: bool = False) -> str:
     c, r = record.call, record.result
     if c.raw:
         title = color.yellow("  → code")
-        head = f"{title}  {_clip(c.raw.splitlines()[0], 100)}"
+        raw_lines = c.raw.splitlines()
+        head = f"{title}  {_clip(raw_lines[0], 100)}"
         lines = [head]
-        for extra in c.raw.splitlines()[1:4]:
-            lines.append(f"           {_clip(extra, 100)}")
-        if len(c.raw.splitlines()) > 4:
-            lines.append(color.dim(f"           … {len(c.raw.splitlines()) - 4} more lines"))
+        tail = raw_lines[1:] if verbose else raw_lines[1:4]
+        for extra in tail:
+            lines.append(f"           {_clip(extra, 100 if not verbose else 500)}")
+        if not verbose and len(raw_lines) > 4:
+            lines.append(color.dim(f"           … {len(raw_lines) - 4} more lines"))
     elif c.tool:
         title = color.yellow(f"  → {c.tool}")
         lines = [title]
@@ -391,7 +396,7 @@ def stream_run_banner(trace: Trace, *, color: _Color | None = None) -> str:
 
 
 def render_turn(trace: Trace, index: int, *, style: str = "plain",
-                color: _Color | None = None) -> str:
+                color: _Color | None = None, verbose: bool = False) -> str:
     """One turn: what was newly said to the model, and what came back."""
     turn = trace.turns[index]
     previous = len(trace.turns[index - 1].messages_in) if index else 0
@@ -416,11 +421,13 @@ def render_turn(trace: Trace, index: int, *, style: str = "plain",
         )
         out = [head]
         for m in new:
-            line = _showcase_message(m, summarise=(index == 0), color=c)
+            if verbose and index == 0 and str(m.get("role")) == "system":
+                continue
+            line = _showcase_message(m, summarise=(index == 0), verbose=verbose, color=c)
             if line:
                 out.append(line)
         out += _showcase_assistant(turn.assistant_text, has_calls=bool(calls), color=c)
-        out += [_showcase_call(call, c) for call in calls]
+        out += [_showcase_call(call, c, verbose=verbose) for call in calls]
         return "\n".join(out)
 
     head = (f"  ── turn {turn.index}"
@@ -448,7 +455,7 @@ def _label(variant: Any) -> str:
 
 
 def render(trace: Trace, *, since: int = 0, header: bool = True,
-           style: str = "plain") -> str:
+           style: str = "plain", verbose: bool = False) -> str:
     """The whole exchange, or everything from turn `since` onward."""
     color = _color_for() if style == "showcase" else _Color(False)
     out: list[str] = []
@@ -462,7 +469,21 @@ def render(trace: Trace, *, since: int = 0, header: bool = True,
             out.append(f"┌─ {trace.run_id}   task={trace.task_id}"
                        f"   arm={_label(trace.variant)}")
 
-    out += [render_turn(trace, i, style=style, color=color)
+    if header and style == "showcase" and verbose and trace.turns:
+        # Packaging / preamble lives in turn 0's system slice — surface it before
+        # the turn loop so a reader sees what the model got first.
+        c = color or _color_for()
+        turn0 = trace.turns[0]
+        for m in turn0.messages_in:
+            if str(m.get("role")) != "system":
+                continue
+            line = _showcase_message(m, summarise=False, verbose=True, color=c)
+            if line:
+                out.append(line)
+        if out and out[-1] != "":
+            out.append("")
+
+    out += [render_turn(trace, i, style=style, color=color, verbose=verbose)
             for i in range(since, len(trace.turns))]
 
     if header:
@@ -516,7 +537,8 @@ def load(path: str) -> dict[str, Any]:
         return json.load(fh)
 
 
-def render_stored(data: dict[str, Any], *, style: str = "plain") -> str:
+def render_stored(data: dict[str, Any], *, style: str = "plain",
+                  verbose: bool = False) -> str:
     """Render a trace read back from disk.
 
     Traces are persisted as plain JSON rather than pickled dataclasses, so the
@@ -525,7 +547,7 @@ def render_stored(data: dict[str, Any], *, style: str = "plain") -> str:
     the run was live.
     """
     trace = _rehydrate(data)
-    return render(trace, style=style)
+    return render(trace, style=style, verbose=verbose)
 
 
 def _rehydrate(data: dict[str, Any]) -> Trace:

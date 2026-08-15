@@ -146,6 +146,37 @@ def test_showcase_highlights_final_answer() -> None:
     assert "★ FINAL ANSWER: 3466 seconds" in out
 
 
+def test_showcase_verbose_expands_collapsed_sections() -> None:
+    preamble = "Answer the task using the tools available." + (" x" * 200)
+    code = "\n".join(f"line {i}" for i in range(8))
+    t = _trace()
+    t.record_turn(_turn(0, [
+        {"role": "system", "content": "x" * 5_000},
+        {"role": "system", "content": preamble},
+        {"role": "user", "content": "q"},
+    ]))
+    t.record_call(CallRecord(
+        turn=0,
+        call=Call(tool=None, raw=code),
+        result=Result(200, "ok", 1.0),
+        started_at=0.0,
+    ))
+    compact = render(t, style="showcase")
+    assert "task preamble" in compact
+    assert "more lines" in compact
+    assert "xxxxx" not in compact
+
+    verbose = render(t, style="showcase", verbose=True)
+    assert "task preamble" not in verbose
+    assert "Answer the task using the tools" in verbose
+    assert "5,000 chars of packaging material" not in verbose
+    assert "xxxxx" in verbose
+    assert "line 7" in verbose
+    assert "more lines" not in verbose
+    # Preamble is hoisted above the first turn header.
+    assert verbose.index("Answer the task") < verbose.index("── turn 0")
+
+
 # ---- outcomes --------------------------------------------------------------
 
 def test_truncation_reads_as_budget_not_wrong_answer() -> None:
