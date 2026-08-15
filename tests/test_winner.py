@@ -71,6 +71,26 @@ def test_short_names_are_derived_from_the_axes(arm: str, expected: str) -> None:
     assert short_name(_variant(arm)) == expected
 
 
+def test_z_cheat_is_not_labelled_as_c1() -> None:
+    """Axis-identical to C1; without a control name it reads as shippable docs."""
+    from harness.engine.axes import describe, register_plan_arms
+
+    register_plan_arms({
+        "Z-cheat": {
+            "transport": "http-rest",
+            "discovery": "docs",
+            "invocation": "shell",
+            "instructions": "docs-flat",
+            "confirmation": "none",
+            "materials": {"docs": "skills/catalog-with-results-path.md"},
+        }
+    })
+    v = _variant("Z-cheat")
+    assert short_name(v) == "Docs bait / path-to-answers"
+    assert short_name(v) != short_name(_variant("C1"))
+    assert "PROBE" in describe(v)
+
+
 def test_every_preset_gets_a_name() -> None:
     from harness.engine.axes import PRESET_NAMES
     for name in PRESET_NAMES:

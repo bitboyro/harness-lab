@@ -902,7 +902,10 @@ def build_ledger(
         task_id = str(trace.get("task_id") or row.get("task_id") or "")
         gold = set(merged.get(task_id, ()))
         gold_defined = bool(gold)
-        run_failed = row.get("outcome") not in (None, "pass", "abstain")
+        # correct-refusal is a success (TN). "abstain" is a display label, not
+        # an outcome — treating only that token as non-failure marked every
+        # clean refusal as a failed run for fail_association.
+        run_failed = row.get("outcome") not in (None, "pass", "correct-refusal")
         answerable = bool(row.get("answerable", True))
         task_class = str(row.get("task_class") or "?")
         core_id = str(row.get("core_id") or "")
