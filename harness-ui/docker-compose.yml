@@ -10,7 +10,7 @@ services:
       context: ..
       dockerfile: harness-ui/Dockerfile
       args:
-        HARNESS_VERSION: ${HARNESS_VERSION:-v0.0.1}
+        HARNESS_VERSION: ${HARNESS_VERSION:-v0.0.2}
     image: harness-ui:local
     ports:
       - "127.0.0.1:8085:8085"

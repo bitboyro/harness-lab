@@ -80,7 +80,7 @@ by the engine, not Java.
   differ; fix the setup, do not average.
 - **Pack validate error** — Python `PackError` text is authoritative; Java only
   forwards it.
-- **Version mismatch** — adapter asserts `harness.__version__ == "0.0.1"`.
+- **Version mismatch** — adapter asserts `harness.__version__ == "0.0.2"`.
 
 ## Data layout (`/data`)
 

@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_EXPECT_VERSION = "0.0.1"
+DEFAULT_EXPECT_VERSION = "0.0.2"
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_VERSION = 40
