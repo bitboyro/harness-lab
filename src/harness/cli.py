@@ -281,7 +281,7 @@ def _apply_smoke_profile(args: argparse.Namespace) -> None:
     if not args.presets:
         args.presets = ["Z0", "A1", "D1"]
     args.cores = min(args.cores, 2)
-    args.max_tasks = args.max_tasks or 4
+    args.max_tasks = 4 if args.max_tasks is None else min(args.max_tasks, 4)
     args.repeats = 1
 
 
@@ -295,7 +295,7 @@ def _pin_profile_envelopes(args: argparse.Namespace) -> None:
     """
     if getattr(args, "smoke", False):
         args.cores = min(args.cores, 2)
-        args.max_tasks = args.max_tasks or 4
+        args.max_tasks = 4 if args.max_tasks is None else min(args.max_tasks, 4)
         args.repeats = 1
     if getattr(args, "probe", False):
         args.repeats = 1

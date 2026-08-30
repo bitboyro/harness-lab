@@ -145,3 +145,19 @@ def test_smoke_with_plan_keeps_smoke_cost_envelope() -> None:
     assert args.cores == 2
     assert args.max_tasks == 4
     assert args.presets == ["Z-cheat"]
+
+
+def test_smoke_caps_max_tasks_after_plan_overlay() -> None:
+    """A plan (or CLI) max_tasks above 4 must not bypass the smoke envelope."""
+    from harness.cli import (
+        _apply_plan, _apply_smoke_profile, _pin_profile_envelopes, build_parser,
+    )
+
+    args = build_parser().parse_args([
+        "run", "--smoke", "--plan", "plans/baseline-experiment-80.yaml",
+        "--presets", "Z-cheat", "--max-tasks", "20",
+    ])
+    _apply_smoke_profile(args)
+    _apply_plan(args)
+    _pin_profile_envelopes(args)
+    assert args.max_tasks == 4
