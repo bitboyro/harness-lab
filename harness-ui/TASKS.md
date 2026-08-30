@@ -1,7 +1,7 @@
 # harness-ui coordination board
 
-Branch `feat/harness-ui`. Streams work on `feat/harness-ui-<stream>` and merge
-back here. **Nothing outside `harness-ui/` may be modified.**
+Merged to `main` in harness-lab 0.0.2. Kept as a historical record of how the
+UI was built. Active work now happens on normal feature branches.
 
 Rules:
 

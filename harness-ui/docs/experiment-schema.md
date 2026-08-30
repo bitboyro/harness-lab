@@ -1,8 +1,8 @@
 # Experiment sidecar schema (S6)
 
-**Status:** Contract draft — additive only; does not change `manifest.json`,
-`results.jsonl`, `RunPlan`, or the CLI resume behaviour until engine support
-lands (stream E1 on `main`).
+**Status:** Contract — shipped in harness-lab 0.0.2. Additive only; does not
+change `manifest.json`, `results.jsonl`, or plain `--resume` behaviour on
+directories without this sidecar.
 
 An **experiment** is optional metadata that sits beside an existing results
 directory. A run without `experiment.yaml` behaves exactly as today. Adding the
@@ -35,9 +35,19 @@ valid with zero changes.
 Importing a standalone `plans/*.yaml` into a run directory:
 
 ```bash
-# future CLI — not implemented yet
 harness experiment init plans/baseline-experiment-80.yaml --out results/baseline-experiment-80
-# writes experiment.yaml; first `harness run` still creates manifest.json + ledger
+# writes experiment.yaml; first spend still creates manifest.json + ledger
+```
+
+Other CLI entry points (same sidecar):
+
+```bash
+harness experiment show results/baseline-experiment-80     # JSON envelope (adapter/UI)
+harness experiment status results/baseline-experiment-80   # coverage summary
+harness experiment run results/baseline-experiment-80      # missing cells only
+harness experiment run results/baseline-experiment-80 --slice smoke
+harness experiment arm add results/baseline-experiment-80 E1 M1
+harness experiment snapshot results/baseline-experiment-80  # freeze dated report JSON
 ```
 
 ---
@@ -129,7 +139,7 @@ experiment:
 | `schema_version` | loader | `1` today |
 | `experiment.id` | UI, adapter | must equal directory basename |
 | `experiment.status` | UI | operator lifecycle; does not gate CLI |
-| `run_plan` / `plan` | planner, adapter, future `harness experiment` | declaration |
+| `run_plan` / `plan` | planner, adapter, `harness experiment` CLI | declaration |
 | `slices` | run scheduler | filters missing-cell set |
 | `retired_arms` | scheduler | excluded from declared presets |
 | `episodes` | UI timeline | append-only |
@@ -152,9 +162,9 @@ experiment:
 
 ---
 
-## Missing-cell scheduling (engine E1 — specified here, implemented on main)
+## Missing-cell scheduling
 
-When `harness experiment run DIR [--slice SLICE]` lands:
+When you run `harness experiment run DIR [--slice SLICE]`:
 
 ```
 declared = run_plan.include.presets − retired_arms

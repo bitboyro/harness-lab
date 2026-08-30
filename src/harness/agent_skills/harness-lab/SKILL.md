@@ -95,6 +95,7 @@ clear the run's own minimum detectable effect, and the report will say so.
 | `harness init --agent both` | $0 | Install these skills into a project |
 | `harness rig --cores N --out rig` | $0 | Size a matrix; prints its power table |
 | `harness plan <plan.yaml>` | $0 | Cost projection and approval gate |
+| `harness experiment init/run/status/arm/snapshot …` | $0 / $$ | Sidecar lifecycle; `run` schedules missing cells only |
 | `harness run …` | $$ | The only run command — rig or pack, same path |
 | `harness progress DIR` | $0 | Read a run in flight from a second terminal |
 | `harness report DIR --html r.html` | $0 | Render stored results; re-runs nothing |
