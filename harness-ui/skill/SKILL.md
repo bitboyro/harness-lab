@@ -80,7 +80,8 @@ by the engine, not Java.
   differ; fix the setup, do not average.
 - **Pack validate error** — Python `PackError` text is authoritative; Java only
   forwards it.
-- **Version mismatch** — adapter asserts `harness.__version__ == "0.0.2"`.
+- **Version mismatch** — adapter asserts `harness.__version__` against the pin
+  in Spring config (`0.0.1` today; engine on `main` is `0.0.2` until G6.5).
 
 ## Data layout (`/data`)
 
@@ -93,4 +94,5 @@ config/           providers.json (LLM profiles + registered models)
 secrets/          provider keys and generate staging env — never in YAML
 ```
 
-Pin: harness wheel `v0.0.1` until the image build-arg is bumped.
+Pin: harness wheel `v0.0.1` in the Docker image and Spring `expect-version`
+today; engine release is `0.0.2` — bump both when cutting a matching image.

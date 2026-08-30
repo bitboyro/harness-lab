@@ -1,7 +1,7 @@
 # Plan: OpenAPI → experiment in a few clicks
 
-**Status:** Implementation plan — additive to [contracts.md](./contracts.md) and
-[experiment-schema.md](./experiment-schema.md).
+**Status:** Shipped in harness-lab 0.0.2. Historical implementation plan — the
+live REST/MCP surface is [contracts.md](./contracts.md).
 
 **Goal:** A customer uploads an OpenAPI document, connects staging, clicks through
 a short wizard, and ends with a packaging benchmark (materials + default arms +
@@ -284,24 +284,25 @@ Terminal: `phase` is `complete` or `failed`.
 
 ## Adapter extensions (harness-ui/adapter)
 
-Add subcommands — stdout is always one JSON object; stderr is diagnostic only.
+Shipped subcommands — stdout is always one JSON object; stderr is diagnostic only.
 
 | Subcommand | Args | Returns |
 |---|---|---|
 | `generate-status` | `<workspaceDir>` | `status.json` contents + `terminal: bool` |
 | `generate-manifest` | `<workspaceDir>` | `manifest.json` or error if incomplete |
-| `generate-lint` | `<workspaceDir>` | lint on enriched spec if present, else original |
 
 Contract tests + JSON schemas under `adapter/schemas/` (same pattern as T1.x).
 
-Optional later: `fixtures-list`, `oracle-read` — or serve raw files via artifact
-API without adapter.
+Not implemented: `generate-lint` (lint runs via `lint_target` on the uploaded
+OpenAPI instead). Optional later: `fixtures-list`, `oracle-read` — or serve raw
+files via the artifact API without adapter.
 
 ---
 
-## REST capabilities (additive to contracts.md)
+## REST capabilities
 
-New stream **G** — does not change existing run/experiment endpoints.
+These are frozen in [contracts.md](./contracts.md) (stream **G**). They do not
+change existing run/experiment endpoints.
 
 | Constant | HTTP | Body | Success |
 |---|---|---|---|
@@ -433,7 +434,7 @@ path unchanged.
 - [x] G6.2 — Secrets: staging tokens in `/data/secrets/`, env injection for subprocess only
 - [x] G6.3 — E2E test: upload → generate → probe → report JSON shapes (`scripts/e2e-generate.sh`)
 - [x] G6.4 — Docker compose: `HARNESS_DATA` / generate+secrets volume mounts
-- [ ] G6.5 — Pin bump + adapter version assert (assert path live at 0.0.1; bump when releasing wheel)
+- [ ] G6.5 — Pin bump + adapter version assert (engine is 0.0.2; harness-ui image still pins 0.0.1)
 
 ---
 

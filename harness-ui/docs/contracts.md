@@ -5,8 +5,10 @@ Java must **not** compute success rates, intervals, MDE, winner, pooling
 refusals, cost projections, or pack validity — those come from the adapter or
 the CLI subprocess.
 
-Pinned harness wheel: assert `harness.__version__ == "0.0.1"` (release tag
-`v0.0.1`) until a newer pin is agreed.
+Pinned harness wheel: harness-ui currently asserts `harness.__version__ ==
+"0.0.1"` (release tag `v0.0.1`) in the Docker image and Spring config. The
+engine on `main` is `0.0.2`; bump the pin when cutting a matching harness-ui
+release (coordination board task G6.5).
 
 ---
 
@@ -55,7 +57,7 @@ directory contains an `experiment.yaml` sidecar (see
 | `list_experiment_reports` | `GET /api/v1/experiments/{id}/reports` | — | `200` → `ReportSnapshotRef[]` | From `report_snapshots` + disk |
 | `snapshot_experiment_report` | `POST /api/v1/experiments/{id}/reports/snapshot` | — | `201` → `ReportSnapshotRef` | Adapter report JSON → `reports/` |
 
-### Generate capabilities (G — additive; not implemented in Java until G4)
+### Generate capabilities (G — additive; shipped in 0.0.2)
 
 OpenAPI onboarding jobs live under `/data/generate/<jobId>/`. The CLI writes
 `status.json`, `manifest.json`, and workspace artifacts; Java subprocesses the

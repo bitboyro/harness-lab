@@ -51,15 +51,17 @@ Plain runs without `experiment.yaml` behave exactly as before. See
 ## Hard constraints
 
 - Prefer not to invent harness judgment in Java/UI — subprocess CLI + adapter JSON.
-- Image installs the real release wheel via `install.py --download --tag=vX.Y.Z`
-  (still pinned `v0.0.1` until the next wheel; generate/mock need a matching pin).
+- Image installs the real release wheel via `install.py --download --tag=vX.Y.Z`.
+  The Dockerfile default is still `v0.0.1`; the engine on `main` is `0.0.2` —
+  bump `HARNESS_VERSION` and the Spring `expect-version` when cutting a release
+  (task G6.5 on the coordination board).
 - Loopback-bound (`127.0.0.1:8085`). No auth, no reverse proxy.
 
 ## Local (dev)
 
 ```bash
 # API + static UI (after web build + sync-web-static.sh)
-./harness-ui/scripts/dev-start.sh   # if present; else spring-boot:run on :8085
+./harness-ui/scripts/dev-start.sh
 
 python3 harness-ui/adapter/harness_json.py report results/auth-smoke | python3 -m json.tool | head
 ```

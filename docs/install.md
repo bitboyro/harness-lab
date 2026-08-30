@@ -48,7 +48,7 @@ If you have the repo but not a bundle, skip the build:
 
 ```bash
 python3 install.py --download            # latest release
-python3 install.py --tag=v0.0.1          # a specific one
+python3 install.py --tag=v0.0.2          # a specific one
 ```
 
 No credentials, no `gh`, no extra tooling — it reads the public releases API
@@ -62,7 +62,7 @@ by hand.
 The wheel is `py3-none-any` — one file, every OS, every Python 3.11+:
 
 ```bash
-pip install harness_lab-0.0.1-py3-none-any.whl[openai]
+pip install harness_lab-0.0.2-py3-none-any.whl[openai]
 ```
 
 ## From a checkout

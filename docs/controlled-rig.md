@@ -126,6 +126,25 @@ none can be added after seeing them. See
 [examples/plan.yaml](../examples/plan.yaml); `--strict` refuses a plan whose
 confirmatory set does not match the one declared in code.
 
+## Long-running matrices with an experiment sidecar
+
+For a matrix you expect to pause, extend, or slice, write an `experiment.yaml`
+sidecar beside the results directory. Plain runs without the file keep today's
+`--resume` behaviour unchanged.
+
+```bash
+harness experiment init plans/baseline-experiment-80.yaml \
+  --out results/baseline-experiment-80
+harness experiment run results/baseline-experiment-80   # missing cells only
+harness experiment status results/baseline-experiment-80
+harness experiment arm add results/baseline-experiment-80 E1
+harness experiment run results/baseline-experiment-80 --slice smoke
+```
+
+Adding presets after a partial run schedules **new arm cells only**; shrinking
+the declared world after ledger rows exist is refused. Full schema:
+`harness-ui/docs/experiment-schema.md` (also used by the local UI).
+
 ## Declaring your own arm
 
 The sixteen shipped arms are a starting ladder, not the limit. A run plan may
