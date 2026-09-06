@@ -298,6 +298,85 @@ def _apply_probe_profile(args: argparse.Namespace) -> None:
     args.resume = False
 
 
+def _live_http_base(pack) -> str | None:
+    """The HTTP URL a non-MCP field run will actually hit, or ``None``.
+
+    ``api.openapi`` may be a local file; ``base_url_env`` may be unset until
+    runtime. Only a real ``http(s)`` URL is something to probe for reach.
+    """
+    for candidate in (pack.api.openapi,
+                      os.environ.get(pack.api.base_url_env or "")):
+        if candidate and candidate.startswith(("http://", "https://")):
+            return candidate
+    return None
+
+
+def _verify_field_reachable(pack, revision):
+    """Refuse to start a paid matrix against a target that will not answer.
+
+    A green build and an externally reachable protocol surface are different
+    facts — DNS, the reverse proxy, TLS, auth and the negotiated MCP revision
+    all sit between them. So before the projection and the approval prompt,
+    complete one fresh handshake from the same path an arm will use: MCP
+    ``initialize`` + ``tools/list``, or a bare request against an HTTP base
+    URL. Any failure is the operator's to fix (``PackTargetError`` → exit 40),
+    not an infra-voided cell discovered mid-run after money is spent.
+
+    Returns the tool list when it did an MCP handshake, so the caller derives
+    the surface from that same call rather than paying the handshake twice.
+    """
+    if pack.api.mcp:
+        from .engine.mcp import McpClient
+        from .engine.mcp.transport import HttpTransport, TransportError
+        client = McpClient(
+            HttpTransport.from_env(pack.api.mcp.url,
+                                   auth_type=pack.api.auth.type,
+                                   auth_env=pack.api.auth.env,
+                                   header_name=pack.api.auth.header_name),
+            revision)
+        try:
+            client.connect()
+            listed = client.list_tools()
+        except TransportError as e:
+            raise PackTargetError(
+                f"target unreachable — MCP handshake against {pack.api.mcp.url} "
+                f"failed before anything was spent: {e}. Fix the deployed server "
+                f"(or the pack's api.mcp.url / auth) and re-run."
+            ) from e
+        except Exception as e:  # initialize answered but not cleanly
+            raise PackTargetError(
+                f"{pack.api.mcp.url} answered but did not complete the MCP "
+                f"handshake: {e!r}. The path is routable but the server is not "
+                f"speaking {revision.value} on it."
+            ) from e
+        if not listed.tools:
+            raise PackTargetError(
+                f"{pack.api.mcp.url} completed initialize but tools/list is "
+                f"empty — nothing for an arm to call. Check auth scope and that "
+                f"the deployed server exposes its tools on this path."
+            )
+        print(f"handshake ok: {pack.api.mcp.url} ({len(listed.tools)} tools)")
+        return listed.tools
+
+    url = _live_http_base(pack)
+    if url:
+        import urllib.error
+        import urllib.request
+        try:
+            urllib.request.urlopen(
+                urllib.request.Request(url, method="GET"), timeout=10
+            ).close()
+        except urllib.error.HTTPError:
+            pass  # a status is the app's business; the path is reachable
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            raise PackTargetError(
+                f"target unreachable — GET {url} failed before anything was "
+                f"spent: {e}. Fix the target or the pack before re-running."
+            ) from e
+        print(f"reachable: {url}")
+    return None
+
+
 def _field_target(args: argparse.Namespace, pack):
     """A live target described by a pack: MCP server, or a plain HTTP surface.
 
@@ -313,8 +392,19 @@ def _field_target(args: argparse.Namespace, pack):
     if pack.api.mcp and pack.api.mcp.spec_revision == "auto":
         from .engine.mcp import detect_revision
         from .engine.mcp.transport import probe_server
-        revision = detect_revision(probe_server(pack.api.mcp.url))
+        try:
+            revision = detect_revision(probe_server(pack.api.mcp.url))
+        except Exception as e:
+            raise PackTargetError(
+                f"target unreachable — cannot negotiate an MCP revision with "
+                f"{pack.api.mcp.url}: {e}. Fix the deployed server or the pack "
+                f"and re-run."
+            ) from e
         print(f"detected MCP revision: {revision.value}")
+
+    # Reachability gate: build success is not an externally reachable protocol
+    # surface. One fresh handshake, before the projection and the spend.
+    listed_tools = _verify_field_reachable(pack, revision)
 
     # The surface. For a live MCP target it comes from the server's own
     # tools/list — requiring a hand-written OpenAPI alongside would guarantee
@@ -323,17 +413,7 @@ def _field_target(args: argparse.Namespace, pack):
         spec = load_spec(args.spec)
     elif pack.api.mcp:
         from .engine.generate import spec_from_tools
-        from .engine.mcp import McpClient
-        from .engine.mcp.transport import HttpTransport
-        probe_client = McpClient(
-            HttpTransport.from_env(pack.api.mcp.url,
-                                   auth_type=pack.api.auth.type,
-                                   auth_env=pack.api.auth.env,
-                                   header_name=pack.api.auth.header_name),
-            revision)
-        probe_client.connect()
-        listed = probe_client.list_tools()
-        spec = spec_from_tools(listed.tools, title=pack.pack.id)
+        spec = spec_from_tools(listed_tools, title=pack.pack.id)
         print(f"derived surface from tools/list: {len(spec.operations)} tools")
     elif pack.api.openapi:
         spec = load_spec(pack.api.openapi)
