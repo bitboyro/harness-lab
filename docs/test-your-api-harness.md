@@ -70,6 +70,15 @@ harness run --pack packs/your-api.yaml --probe \
 `--probe` means first contact: probe arms, one repeat, no resume. It prints a
 cost projection and asks before spending.
 
+**Before it spends, it completes one fresh handshake against the target** — MCP
+`initialize` + `tools/list`, or a bare request against an HTTP base URL — from
+the same path an arm will use. A green build and an externally reachable
+protocol surface are different facts: DNS, the reverse proxy, TLS, auth scope
+and the negotiated MCP revision all sit between them. If that handshake fails
+the run refuses to start (exit 40) and names what to fix — it does not begin the
+matrix and discover the target is down halfway through a paid run. This gate
+applies to every `harness run --pack`, not just `--probe`.
+
 **Always include Z0.** It is the arm with no tools at all, and on a real API it
 measures how much the model already knows about you. Every other number is
 reported as lift over it. A high Z0 is not a failure — it tells you your tasks

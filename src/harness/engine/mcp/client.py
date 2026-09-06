@@ -74,6 +74,11 @@ class McpClient:
         self.revision = revision
         self._session_id: str | None = None
         self._initialized = False
+        #: The ``protocolVersion`` the server reported in its `initialize`
+        #: result, or ``None`` on 2026-07-28 (no handshake) or if the server
+        #: omitted it. Lets a caller resolve `spec_revision: auto` from the
+        #: same handshake instead of a second speculative `initialize`.
+        self.server_protocol_version: str | None = None
         self._count = token_counter or (lambda s: max(1, len(s) // 4))
         self.cost = CostBreakdown()
         self._next_id = 0
@@ -107,6 +112,8 @@ class McpClient:
         self._session_id = (headers.get("mcp-session-id")
                             or response.get("_sessionId")
                             or response.get("sessionId"))
+        reported = (response.get("result") or {}).get("protocolVersion")
+        self.server_protocol_version = str(reported) if reported else None
 
         notice = self._envelope("notifications/initialized", {})
         self.cost.session_setup_tokens += self._count(json.dumps(notice))

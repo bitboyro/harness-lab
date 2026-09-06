@@ -28,6 +28,35 @@ class TransportError(RuntimeError):
     pass
 
 
+def auth_headers_from_env(auth_type: str = "none", auth_env: str | None = None,
+                          header_name: str | None = None) -> dict[str, str]:
+    """Resolve a pack's ``api.auth`` into request headers, reading the token
+    from the environment and never inlining it.
+
+    Split out from ``HttpTransport.from_env`` so a caller that only needs the
+    headers — the field reachability gate probing a plain HTTP surface — gets
+    the same credential resolution, and the same ``TransportError`` on a
+    misconfigured ``api.auth``, without constructing a transport.
+    """
+    headers: dict[str, str] = {}
+    if auth_type == "none":
+        return headers
+    if not auth_env:
+        raise TransportError(f"auth type {auth_type!r} needs an env var name")
+    token = os.environ.get(auth_env)
+    if not token:
+        raise TransportError(f"{auth_env} is not set; the pack asks for {auth_type} auth")
+    if auth_type == "bearer":
+        headers["Authorization"] = f"Bearer {token}"
+    elif auth_type == "header":
+        if not header_name:
+            raise TransportError("auth type 'header' needs header_name")
+        headers[header_name] = token
+    elif auth_type == "basic":
+        headers["Authorization"] = f"Basic {token}"
+    return headers
+
+
 @dataclass
 class HttpTransport:
     """Streamable HTTP.
@@ -51,24 +80,9 @@ class HttpTransport:
     def from_env(cls, url: str, auth_type: str = "none", auth_env: str | None = None,
                  header_name: str | None = None, **kw: Any) -> HttpTransport:
         """Build with credentials read from the environment, never inlined."""
-        headers: dict[str, str] = {}
-        if auth_type != "none":
-            if not auth_env:
-                raise TransportError(f"auth type {auth_type!r} needs an env var name")
-            token = os.environ.get(auth_env)
-            if not token:
-                raise TransportError(
-                    f"{auth_env} is not set; the pack asks for {auth_type} auth"
-                )
-            if auth_type == "bearer":
-                headers["Authorization"] = f"Bearer {token}"
-            elif auth_type == "header":
-                if not header_name:
-                    raise TransportError("auth type 'header' needs header_name")
-                headers[header_name] = token
-            elif auth_type == "basic":
-                headers["Authorization"] = f"Basic {token}"
-        return cls(url=url, headers=headers, **kw)
+        return cls(url=url,
+                   headers=auth_headers_from_env(auth_type, auth_env, header_name),
+                   **kw)
 
     def send(self, body: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
         # A JSON-RPC *notification* has no `id` and gets no reply. Waiting for
@@ -118,9 +132,15 @@ def _parse_json(raw: str) -> dict[str, Any]:
     if not raw.strip():
         return {}
     try:
-        return json.loads(raw)
+        parsed = json.loads(raw)
     except json.JSONDecodeError as e:
         raise TransportError(f"response was not JSON: {raw[:200]}") from e
+    # A JSON-RPC response is an object. A bare array, string or number means the
+    # endpoint is not speaking JSON-RPC — callers downstream do `.get(...)` on
+    # this and a non-dict would surface as an AttributeError traceback.
+    if not isinstance(parsed, dict):
+        raise TransportError(f"response was not a JSON-RPC object: {raw[:200]}")
+    return parsed
 
 
 def _parse_sse(raw: str) -> dict[str, Any]:

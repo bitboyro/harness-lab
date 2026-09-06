@@ -55,6 +55,15 @@ ledger, `--concurrency`, `--resume`, `harness report`, `harness compare` and
 Use `--stream --concurrency 1` when the user wants to *watch* one run. At higher
 concurrency turns from different runs interleave.
 
+**Reachability gate.** Every `harness run --pack` completes one fresh handshake
+against the target before it prints the projection — MCP `initialize` +
+`tools/list`, or a bare request against an HTTP base URL. "CI is green" and "the
+deployed server answers on its public path" are different facts. If the
+handshake fails the run refuses to start (exit 40) with what to fix; do not
+treat that as a harness bug — check the URL, auth scope, and that the target is
+actually deployed and routable from where the run executes. Never march a user
+from "pack drafted" to a paid matrix without a handshake having succeeded.
+
 ---
 
 ## 0. Model and run params (required before spend)

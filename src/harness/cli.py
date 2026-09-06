@@ -315,23 +315,181 @@ def _apply_probe_profile(args: argparse.Namespace) -> None:
     args.resume = False
 
 
+def _live_http_base(pack) -> str | None:
+    """The HTTP URL a non-MCP field run will actually hit, or ``None``.
+
+    ``api.openapi`` may be a local file; ``base_url_env`` may be unset until
+    runtime. Only a real ``http(s)`` URL is something to probe for reach.
+    """
+    for candidate in (pack.api.openapi,
+                      os.environ.get(pack.api.base_url_env or "")):
+        if candidate and candidate.startswith(("http://", "https://")):
+            return candidate
+    return None
+
+
+def _verify_field_reachable(pack, args):
+    """Refuse to start a paid matrix against a target that will not answer.
+
+    A green build and an externally reachable protocol surface are different
+    facts — DNS, the reverse proxy, TLS, auth and the negotiated MCP revision
+    all sit between them. So before the projection and the approval prompt,
+    complete one fresh handshake from the same path an arm will use, *with the
+    pack's own credentials*: MCP ``initialize`` + ``tools/list``, or a bare
+    request against an HTTP base URL. Any failure is the operator's to fix
+    (``PackTargetError`` → exit 40) — an unroutable host, a missing credential
+    env var, an empty ``tools/list``, a server not speaking the negotiated
+    revision — not an infra-voided cell discovered mid-run after money is spent.
+
+    Returns ``(revision, listed_tools_or_None)``. The revision comes back
+    because ``spec_revision: auto`` is resolved here by asking the server, and
+    both the axes and the manifest must record the one actually used. The tool
+    list comes back so the caller derives the surface from that same call
+    rather than paying the handshake twice.
+    """
+    from .engine.axes import McpRevision
+    from .engine.mcp.transport import HttpTransport, TransportError, auth_headers_from_env
+    requested = McpRevision(args.mcp_revision)
+
+    # The pack's credentials, resolved once and applied to every request the
+    # gate makes — MCP handshake and bare HTTP probe alike. A misconfigured
+    # `api.auth` (a header type with no name, a credential env var that is not
+    # set) raises TransportError; that is operator error, caught here so it
+    # surfaces as a PackTargetError and not a traceback.
+    try:
+        auth_headers = auth_headers_from_env(
+            pack.api.auth.type, pack.api.auth.env, pack.api.auth.header_name
+        )
+    except TransportError as e:
+        raise PackTargetError(
+            f"cannot resolve the pack's api.auth credentials: {e}. Fix the "
+            f"pack's api.auth or set the credential env var, then re-run."
+        ) from e
+
+    if pack.api.mcp:
+        from .engine.mcp import McpClient, detect_revision
+
+        transport = HttpTransport(url=pack.api.mcp.url, headers=dict(auth_headers))
+        auto = pack.api.mcp.spec_revision == "auto"
+        url = pack.api.mcp.url
+
+        def _connect(rev):
+            """One authed `initialize`, every failure a PackTargetError.
+
+            A transport failure is an unreachable target; anything else
+            (a non-JSON-RPC body, a protocol error) is a server that answers
+            but does not speak MCP on this path — either way the operator
+            fixes it before the matrix, not mid-run.
+            """
+            client = McpClient(transport, rev)
+            try:
+                client.connect()
+            except TransportError as e:
+                raise PackTargetError(
+                    f"target unreachable — MCP handshake against {url} failed "
+                    f"before anything was spent: {e}. Fix the deployed server "
+                    f"(or the pack's api.mcp.url / auth), or pin "
+                    f"api.mcp.spec_revision if this server does not support the "
+                    f"initialize handshake."
+                ) from e
+            except Exception as e:  # answered, but not a clean initialize
+                raise PackTargetError(
+                    f"{url} answered but did not complete the MCP initialize "
+                    f"handshake: {e!r}. The path is routable but the server is "
+                    f"not speaking MCP cleanly on it."
+                ) from e
+            return client
+
+        # For `auto`, start on the revision that actually handshakes (legacy)
+        # so the server reports its `protocolVersion`; 2026-07-28 answers
+        # `initialize` too through the offramp, and `connect()` on that revision
+        # sends nothing, so a wrong guess costs one local call, never a round trip.
+        first = McpRevision.LEGACY if auto else requested
+        client = _connect(first)
+
+        # What the server reports, if it handshook at all (empty on 2026-07-28:
+        # no handshake, nothing to compare against).
+        reported = (
+            detect_revision({"protocolVersion": client.server_protocol_version})
+            if client.server_protocol_version else None
+        )
+
+        if auto:
+            revision = reported or first
+            if revision is not first:
+                client = _connect(revision)  # no-op connect on 2026-07-28
+            print(f"detected MCP revision: {revision.value}")
+        else:
+            revision = requested
+            # A pinned revision the server contradicts would silently benchmark
+            # a protocol the target does not speak, and results are never pooled
+            # across revisions (V10) — a wrong pin is not a recoverable mistake.
+            if reported is not None and reported is not revision:
+                raise PackTargetError(
+                    f"{url} reports MCP {client.server_protocol_version!r} "
+                    f"({reported.value}), but this run is configured for "
+                    f"{revision.value}. Set api.mcp.spec_revision to 'auto', or "
+                    f"align --mcp-revision and the pack with the server."
+                )
+
+        try:
+            listed = client.list_tools()
+        except TransportError as e:
+            raise PackTargetError(
+                f"target unreachable — tools/list against {url} failed before "
+                f"anything was spent: {e}. Fix the deployed server or the pack "
+                f"and re-run."
+            ) from e
+        except Exception as e:  # answered, but not a well-formed tools/list
+            raise PackTargetError(
+                f"{url} completed initialize but tools/list did not: {e!r}. The "
+                f"path is routable but the server is not speaking "
+                f"{revision.value} on it."
+            ) from e
+        if not listed.tools:
+            raise PackTargetError(
+                f"{url} completed initialize but tools/list is empty — nothing "
+                f"for an arm to call. Check auth scope and that the deployed "
+                f"server exposes its tools on this path."
+            )
+        print(f"handshake ok: {url} ({len(listed.tools)} tools)")
+        return revision, listed.tools
+
+    url = _live_http_base(pack)
+    if url:
+        import urllib.error
+        import urllib.request
+        req = urllib.request.Request(
+            url, method="GET",
+            headers={"User-Agent": "harness-lab", **auth_headers},
+        )
+        try:
+            urllib.request.urlopen(req, timeout=10).close()
+        except urllib.error.HTTPError:
+            pass  # a status is the app's business; the path is reachable
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            raise PackTargetError(
+                f"target unreachable — GET {url} failed before anything was "
+                f"spent: {e}. Fix the target or the pack before re-running."
+            ) from e
+        print(f"reachable: {url}")
+    return requested, None
+
+
 def _field_target(args: argparse.Namespace, pack):
     """A live target described by a pack: MCP server, or a plain HTTP surface.
 
     Returns ``(target, revision)``. The revision comes back because it is
-    resolved here — possibly by asking the server — and both the axes and the
-    manifest have to record the one actually used, never the one requested.
+    resolved by the reachability gate — possibly by asking the server — and
+    both the axes and the manifest have to record the one actually used, never
+    the one requested.
     """
-    from .engine.axes import McpRevision
     from .engine.target import FieldTarget
 
-    # Resolve spec_revision before anything is spent.
-    revision = McpRevision(args.mcp_revision)
-    if pack.api.mcp and pack.api.mcp.spec_revision == "auto":
-        from .engine.mcp import detect_revision
-        from .engine.mcp.transport import probe_server
-        revision = detect_revision(probe_server(pack.api.mcp.url))
-        print(f"detected MCP revision: {revision.value}")
+    # Reachability gate: build success is not an externally reachable protocol
+    # surface. One fresh handshake with the pack's credentials, before the
+    # projection and the spend — and it is where `spec_revision: auto` resolves.
+    revision, listed_tools = _verify_field_reachable(pack, args)
 
     # The surface. For a live MCP target it comes from the server's own
     # tools/list — requiring a hand-written OpenAPI alongside would guarantee
@@ -340,17 +498,7 @@ def _field_target(args: argparse.Namespace, pack):
         spec = load_spec(args.spec)
     elif pack.api.mcp:
         from .engine.generate import spec_from_tools
-        from .engine.mcp import McpClient
-        from .engine.mcp.transport import HttpTransport
-        probe_client = McpClient(
-            HttpTransport.from_env(pack.api.mcp.url,
-                                   auth_type=pack.api.auth.type,
-                                   auth_env=pack.api.auth.env,
-                                   header_name=pack.api.auth.header_name),
-            revision)
-        probe_client.connect()
-        listed = probe_client.list_tools()
-        spec = spec_from_tools(listed.tools, title=pack.pack.id)
+        spec = spec_from_tools(listed_tools, title=pack.pack.id)
         print(f"derived surface from tools/list: {len(spec.operations)} tools")
     elif pack.api.openapi:
         spec = load_spec(pack.api.openapi)
