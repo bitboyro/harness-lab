@@ -311,29 +311,66 @@ def _live_http_base(pack) -> str | None:
     return None
 
 
-def _verify_field_reachable(pack, revision):
+def _verify_field_reachable(pack, args):
     """Refuse to start a paid matrix against a target that will not answer.
 
     A green build and an externally reachable protocol surface are different
     facts — DNS, the reverse proxy, TLS, auth and the negotiated MCP revision
     all sit between them. So before the projection and the approval prompt,
-    complete one fresh handshake from the same path an arm will use: MCP
-    ``initialize`` + ``tools/list``, or a bare request against an HTTP base
-    URL. Any failure is the operator's to fix (``PackTargetError`` → exit 40),
-    not an infra-voided cell discovered mid-run after money is spent.
+    complete one fresh handshake from the same path an arm will use, *with the
+    pack's own credentials*: MCP ``initialize`` + ``tools/list``, or a bare
+    request against an HTTP base URL. Any failure is the operator's to fix
+    (``PackTargetError`` → exit 40) — an unroutable host, a missing credential
+    env var, an empty ``tools/list``, a server not speaking the negotiated
+    revision — not an infra-voided cell discovered mid-run after money is spent.
 
-    Returns the tool list when it did an MCP handshake, so the caller derives
-    the surface from that same call rather than paying the handshake twice.
+    Returns ``(revision, listed_tools_or_None)``. The revision comes back
+    because ``spec_revision: auto`` is resolved here by asking the server, and
+    both the axes and the manifest must record the one actually used. The tool
+    list comes back so the caller derives the surface from that same call
+    rather than paying the handshake twice.
     """
+    from .engine.axes import McpRevision
+    revision = McpRevision(args.mcp_revision)
+
     if pack.api.mcp:
-        from .engine.mcp import McpClient
-        from .engine.mcp.transport import HttpTransport, TransportError
-        client = McpClient(
-            HttpTransport.from_env(pack.api.mcp.url,
-                                   auth_type=pack.api.auth.type,
-                                   auth_env=pack.api.auth.env,
-                                   header_name=pack.api.auth.header_name),
-            revision)
+        from .engine.mcp import McpClient, detect_revision
+        from .engine.mcp.transport import HttpTransport, TransportError, probe_server
+
+        # Build the authed transport once. `from_env` raises TransportError for
+        # a misconfigured `api.auth` (a header type with no name, a credential
+        # env var that is not set) — that is operator error, not a traceback.
+        try:
+            transport = HttpTransport.from_env(
+                pack.api.mcp.url,
+                auth_type=pack.api.auth.type,
+                auth_env=pack.api.auth.env,
+                header_name=pack.api.auth.header_name,
+            )
+        except TransportError as e:
+            raise PackTargetError(
+                f"cannot build the MCP transport for {pack.api.mcp.url}: {e}. "
+                f"Fix the pack's api.auth or set the credential env var, then "
+                f"re-run."
+            ) from e
+
+        # Revision negotiation uses the same credentials — an auth-gated server
+        # rejects an unauthenticated `initialize` and the probe would silently
+        # fall back to a default, benchmarking the wrong protocol (V10).
+        if pack.api.mcp.spec_revision == "auto":
+            try:
+                revision = detect_revision(
+                    probe_server(pack.api.mcp.url, headers=dict(transport.headers))
+                )
+            except Exception as e:
+                raise PackTargetError(
+                    f"target unreachable — cannot negotiate an MCP revision "
+                    f"with {pack.api.mcp.url}: {e}. Fix the deployed server or "
+                    f"the pack and re-run."
+                ) from e
+            print(f"detected MCP revision: {revision.value}")
+
+        client = McpClient(transport, revision)
         try:
             client.connect()
             listed = client.list_tools()
@@ -356,7 +393,7 @@ def _verify_field_reachable(pack, revision):
                 f"the deployed server exposes its tools on this path."
             )
         print(f"handshake ok: {pack.api.mcp.url} ({len(listed.tools)} tools)")
-        return listed.tools
+        return revision, listed.tools
 
     url = _live_http_base(pack)
     if url:
@@ -374,37 +411,23 @@ def _verify_field_reachable(pack, revision):
                 f"spent: {e}. Fix the target or the pack before re-running."
             ) from e
         print(f"reachable: {url}")
-    return None
+    return revision, None
 
 
 def _field_target(args: argparse.Namespace, pack):
     """A live target described by a pack: MCP server, or a plain HTTP surface.
 
     Returns ``(target, revision)``. The revision comes back because it is
-    resolved here — possibly by asking the server — and both the axes and the
-    manifest have to record the one actually used, never the one requested.
+    resolved by the reachability gate — possibly by asking the server — and
+    both the axes and the manifest have to record the one actually used, never
+    the one requested.
     """
-    from .engine.axes import McpRevision
     from .engine.target import FieldTarget
 
-    # Resolve spec_revision before anything is spent.
-    revision = McpRevision(args.mcp_revision)
-    if pack.api.mcp and pack.api.mcp.spec_revision == "auto":
-        from .engine.mcp import detect_revision
-        from .engine.mcp.transport import probe_server
-        try:
-            revision = detect_revision(probe_server(pack.api.mcp.url))
-        except Exception as e:
-            raise PackTargetError(
-                f"target unreachable — cannot negotiate an MCP revision with "
-                f"{pack.api.mcp.url}: {e}. Fix the deployed server or the pack "
-                f"and re-run."
-            ) from e
-        print(f"detected MCP revision: {revision.value}")
-
     # Reachability gate: build success is not an externally reachable protocol
-    # surface. One fresh handshake, before the projection and the spend.
-    listed_tools = _verify_field_reachable(pack, revision)
+    # surface. One fresh handshake with the pack's credentials, before the
+    # projection and the spend — and it is where `spec_revision: auto` resolves.
+    revision, listed_tools = _verify_field_reachable(pack, args)
 
     # The surface. For a live MCP target it comes from the server's own
     # tools/list — requiring a hand-written OpenAPI alongside would guarantee
