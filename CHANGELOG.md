@@ -10,8 +10,10 @@ Versions follow [semver](https://semver.org/spec/v2.0.0.html).
 - Field runs now complete one fresh handshake against the target before the cost
   projection — MCP `initialize` + `tools/list`, or a bare request against an HTTP
   base URL — from the same path an arm will use, with the pack's own
-  credentials. `spec_revision: auto` is negotiated on that same authenticated
-  call. An unroutable target, a misconfigured `api.auth`, an empty `tools/list`,
+  credentials. `spec_revision: auto` is resolved from that same single
+  authenticated handshake (`McpClient` now exposes the server's reported
+  `protocolVersion`), not a second speculative `initialize`. An unroutable
+  target, a misconfigured `api.auth`, an empty `tools/list`,
   or a server not speaking the negotiated MCP revision refuses the run with exit
   40 instead of voiding cells mid-matrix. Applies to every `harness run --pack`,
   `--probe` included. See

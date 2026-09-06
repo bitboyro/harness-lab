@@ -64,6 +64,7 @@ def test_auto_revision_detection_uses_the_configured_auth(
     """An auth-gated server 401s an unauthenticated ``initialize``; the gate
     must send the bearer token to both the revision probe and the handshake."""
     seen_auth: list[str | None] = []
+    seen_methods: list[str] = []
 
     class _Handler(http.server.BaseHTTPRequestHandler):
         def do_POST(self) -> None:  # noqa: N802
@@ -72,6 +73,7 @@ def test_auto_revision_detection_uses_the_configured_auth(
             body = json.loads(
                 self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}"
             )
+            seen_methods.append(body.get("method", ""))
             if auth != "Bearer s3cret":
                 self.send_response(401)
                 self.end_headers()
@@ -118,6 +120,8 @@ def test_auto_revision_detection_uses_the_configured_auth(
     assert revision.value == "legacy"  # 2025-06-18 → pre-2026 revision
     # Every request the gate made carried the token — including the probe.
     assert seen_auth and all(a == "Bearer s3cret" for a in seen_auth)
+    # Auto-detection resolves off the one handshake, not a second initialize.
+    assert seen_methods.count("initialize") == 1
 
 
 # ---- HTTP base URL ------------------------------------------------------

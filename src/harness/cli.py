@@ -331,11 +331,11 @@ def _verify_field_reachable(pack, args):
     rather than paying the handshake twice.
     """
     from .engine.axes import McpRevision
-    revision = McpRevision(args.mcp_revision)
+    requested = McpRevision(args.mcp_revision)
 
     if pack.api.mcp:
         from .engine.mcp import McpClient, detect_revision
-        from .engine.mcp.transport import HttpTransport, TransportError, probe_server
+        from .engine.mcp.transport import HttpTransport, TransportError
 
         # Build the authed transport once. `from_env` raises TransportError for
         # a misconfigured `api.auth` (a header type with no name, a credential
@@ -354,36 +354,47 @@ def _verify_field_reachable(pack, args):
                 f"re-run."
             ) from e
 
-        # Revision negotiation uses the same credentials — an auth-gated server
-        # rejects an unauthenticated `initialize` and the probe would silently
-        # fall back to a default, benchmarking the wrong protocol (V10).
-        if pack.api.mcp.spec_revision == "auto":
-            try:
-                revision = detect_revision(
-                    probe_server(pack.api.mcp.url, headers=dict(transport.headers))
-                )
-            except Exception as e:
-                raise PackTargetError(
-                    f"target unreachable — cannot negotiate an MCP revision "
-                    f"with {pack.api.mcp.url}: {e}. Fix the deployed server or "
-                    f"the pack and re-run."
-                ) from e
-            print(f"detected MCP revision: {revision.value}")
-
-        client = McpClient(transport, revision)
+        auto = pack.api.mcp.spec_revision == "auto"
+        # One authed handshake does double duty: reachability and, for `auto`,
+        # revision negotiation. Start on the revision that actually handshakes
+        # (legacy) so the server reports its `protocolVersion`; 2026-07-28
+        # answers `initialize` too through the offramp, and `connect()` on that
+        # revision sends nothing, so the only cost of guessing wrong is one
+        # extra local call, never a second round trip.
+        first = McpRevision.LEGACY if auto else requested
+        client = McpClient(transport, first)
         try:
             client.connect()
-            listed = client.list_tools()
         except TransportError as e:
             raise PackTargetError(
                 f"target unreachable — MCP handshake against {pack.api.mcp.url} "
                 f"failed before anything was spent: {e}. Fix the deployed server "
-                f"(or the pack's api.mcp.url / auth) and re-run."
+                f"(or the pack's api.mcp.url / auth), or pin api.mcp.spec_revision "
+                f"if this server does not support the initialize handshake."
             ) from e
-        except Exception as e:  # initialize answered but not cleanly
+
+        revision = first
+        if auto:
+            revision = detect_revision(
+                {"protocolVersion": client.server_protocol_version or ""}
+            )
+            if revision is not first:
+                client = McpClient(transport, revision)
+                client.connect()  # no-op on 2026-07-28: no extra round trip
+            print(f"detected MCP revision: {revision.value}")
+
+        try:
+            listed = client.list_tools()
+        except TransportError as e:
             raise PackTargetError(
-                f"{pack.api.mcp.url} answered but did not complete the MCP "
-                f"handshake: {e!r}. The path is routable but the server is not "
+                f"target unreachable — tools/list against {pack.api.mcp.url} "
+                f"failed before anything was spent: {e}. Fix the deployed server "
+                f"or the pack and re-run."
+            ) from e
+        except Exception as e:  # answered, but not a well-formed tools/list
+            raise PackTargetError(
+                f"{pack.api.mcp.url} completed initialize but tools/list did "
+                f"not: {e!r}. The path is routable but the server is not "
                 f"speaking {revision.value} on it."
             ) from e
         if not listed.tools:
@@ -411,7 +422,7 @@ def _verify_field_reachable(pack, args):
                 f"spent: {e}. Fix the target or the pack before re-running."
             ) from e
         print(f"reachable: {url}")
-    return revision, None
+    return requested, None
 
 
 def _field_target(args: argparse.Namespace, pack):
