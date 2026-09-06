@@ -124,6 +124,67 @@ def test_auto_revision_detection_uses_the_configured_auth(
     assert seen_methods.count("initialize") == 1
 
 
+def _serve(handler_cls) -> tuple[str, "http.server.HTTPServer"]:
+    srv = http.server.HTTPServer(("127.0.0.1", 0), handler_cls)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return f"http://127.0.0.1:{srv.server_port}/mcp", srv
+
+
+def _json_rpc(rpc_id, result) -> bytes:
+    return json.dumps({"jsonrpc": "2.0", "id": rpc_id, "result": result}).encode()
+
+
+def test_a_pinned_revision_the_server_contradicts_is_refused() -> None:
+    class _H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802
+            body = json.loads(
+                self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}"
+            )
+            if body.get("id") is None:
+                self.send_response(202)
+                self.end_headers()
+                return
+            payload = _json_rpc(body["id"], {"protocolVersion": "2026-07-28"})
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *_a) -> None:
+            pass
+
+    url, srv = _serve(_H)
+    try:
+        # Run configured for legacy; the server reports 2026-07-28.
+        args = SimpleNamespace(mcp_revision="legacy", spec=None)
+        api = ApiTarget(mcp=McpTarget(url=url, spec_revision="legacy"))
+        with pytest.raises(PackTargetError, match="configured for legacy"):
+            _verify_field_reachable(_pack(api), args)
+    finally:
+        srv.shutdown()
+
+
+def test_a_non_object_response_is_a_pack_target_error_not_a_traceback() -> None:
+    class _H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802
+            payload = b"[1, 2, 3]"  # valid JSON, not a JSON-RPC object
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *_a) -> None:
+            pass
+
+    url, srv = _serve(_H)
+    try:
+        api = ApiTarget(mcp=McpTarget(url=url, spec_revision="legacy"))
+        with pytest.raises(PackTargetError):
+            _verify_field_reachable(_pack(api), _ARGS)
+    finally:
+        srv.shutdown()
+
+
 # ---- HTTP base URL ------------------------------------------------------
 
 def test_unroutable_http_target_refuses_before_the_spend() -> None:

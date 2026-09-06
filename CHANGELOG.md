@@ -13,11 +13,11 @@ Versions follow [semver](https://semver.org/spec/v2.0.0.html).
   credentials. `spec_revision: auto` is resolved from that same single
   authenticated handshake (`McpClient` now exposes the server's reported
   `protocolVersion`), not a second speculative `initialize`. An unroutable
-  target, a misconfigured `api.auth`, an empty `tools/list`,
-  or a server not speaking the negotiated MCP revision refuses the run with exit
-  40 instead of voiding cells mid-matrix. Applies to every `harness run --pack`,
-  `--probe` included. See
-  [docs/test-your-api-harness.md](./docs/test-your-api-harness.md).
+  target, a misconfigured `api.auth`, an empty `tools/list`, a non-JSON-RPC
+  response body, or a server whose reported revision contradicts the one this
+  run is configured for all refuse the run with exit 40 instead of voiding
+  cells mid-matrix. Applies to every `harness run --pack`, `--probe` included.
+  See [docs/test-your-api-harness.md](./docs/test-your-api-harness.md).
 
 ## [0.0.2] — 2026-08-24
 

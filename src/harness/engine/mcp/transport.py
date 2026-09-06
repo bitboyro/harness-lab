@@ -132,9 +132,15 @@ def _parse_json(raw: str) -> dict[str, Any]:
     if not raw.strip():
         return {}
     try:
-        return json.loads(raw)
+        parsed = json.loads(raw)
     except json.JSONDecodeError as e:
         raise TransportError(f"response was not JSON: {raw[:200]}") from e
+    # A JSON-RPC response is an object. A bare array, string or number means the
+    # endpoint is not speaking JSON-RPC — callers downstream do `.get(...)` on
+    # this and a non-dict would surface as an AttributeError traceback.
+    if not isinstance(parsed, dict):
+        raise TransportError(f"response was not a JSON-RPC object: {raw[:200]}")
+    return parsed
 
 
 def _parse_sse(raw: str) -> dict[str, Any]:

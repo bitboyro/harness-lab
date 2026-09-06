@@ -354,55 +354,88 @@ def _verify_field_reachable(pack, args):
 
         transport = HttpTransport(url=pack.api.mcp.url, headers=dict(auth_headers))
         auto = pack.api.mcp.spec_revision == "auto"
-        # One authed handshake does double duty: reachability and, for `auto`,
-        # revision negotiation. Start on the revision that actually handshakes
-        # (legacy) so the server reports its `protocolVersion`; 2026-07-28
-        # answers `initialize` too through the offramp, and `connect()` on that
-        # revision sends nothing, so the only cost of guessing wrong is one
-        # extra local call, never a second round trip.
-        first = McpRevision.LEGACY if auto else requested
-        client = McpClient(transport, first)
-        try:
-            client.connect()
-        except TransportError as e:
-            raise PackTargetError(
-                f"target unreachable — MCP handshake against {pack.api.mcp.url} "
-                f"failed before anything was spent: {e}. Fix the deployed server "
-                f"(or the pack's api.mcp.url / auth), or pin api.mcp.spec_revision "
-                f"if this server does not support the initialize handshake."
-            ) from e
+        url = pack.api.mcp.url
 
-        revision = first
+        def _connect(rev):
+            """One authed `initialize`, every failure a PackTargetError.
+
+            A transport failure is an unreachable target; anything else
+            (a non-JSON-RPC body, a protocol error) is a server that answers
+            but does not speak MCP on this path — either way the operator
+            fixes it before the matrix, not mid-run.
+            """
+            client = McpClient(transport, rev)
+            try:
+                client.connect()
+            except TransportError as e:
+                raise PackTargetError(
+                    f"target unreachable — MCP handshake against {url} failed "
+                    f"before anything was spent: {e}. Fix the deployed server "
+                    f"(or the pack's api.mcp.url / auth), or pin "
+                    f"api.mcp.spec_revision if this server does not support the "
+                    f"initialize handshake."
+                ) from e
+            except Exception as e:  # answered, but not a clean initialize
+                raise PackTargetError(
+                    f"{url} answered but did not complete the MCP initialize "
+                    f"handshake: {e!r}. The path is routable but the server is "
+                    f"not speaking MCP cleanly on it."
+                ) from e
+            return client
+
+        # For `auto`, start on the revision that actually handshakes (legacy)
+        # so the server reports its `protocolVersion`; 2026-07-28 answers
+        # `initialize` too through the offramp, and `connect()` on that revision
+        # sends nothing, so a wrong guess costs one local call, never a round trip.
+        first = McpRevision.LEGACY if auto else requested
+        client = _connect(first)
+
+        # What the server reports, if it handshook at all (empty on 2026-07-28:
+        # no handshake, nothing to compare against).
+        reported = (
+            detect_revision({"protocolVersion": client.server_protocol_version})
+            if client.server_protocol_version else None
+        )
+
         if auto:
-            revision = detect_revision(
-                {"protocolVersion": client.server_protocol_version or ""}
-            )
+            revision = reported or first
             if revision is not first:
-                client = McpClient(transport, revision)
-                client.connect()  # no-op on 2026-07-28: no extra round trip
+                client = _connect(revision)  # no-op connect on 2026-07-28
             print(f"detected MCP revision: {revision.value}")
+        else:
+            revision = requested
+            # A pinned revision the server contradicts would silently benchmark
+            # a protocol the target does not speak, and results are never pooled
+            # across revisions (V10) — a wrong pin is not a recoverable mistake.
+            if reported is not None and reported is not revision:
+                raise PackTargetError(
+                    f"{url} reports MCP {client.server_protocol_version!r} "
+                    f"({reported.value}), but this run is configured for "
+                    f"{revision.value}. Set api.mcp.spec_revision to 'auto', or "
+                    f"align --mcp-revision and the pack with the server."
+                )
 
         try:
             listed = client.list_tools()
         except TransportError as e:
             raise PackTargetError(
-                f"target unreachable — tools/list against {pack.api.mcp.url} "
-                f"failed before anything was spent: {e}. Fix the deployed server "
-                f"or the pack and re-run."
+                f"target unreachable — tools/list against {url} failed before "
+                f"anything was spent: {e}. Fix the deployed server or the pack "
+                f"and re-run."
             ) from e
         except Exception as e:  # answered, but not a well-formed tools/list
             raise PackTargetError(
-                f"{pack.api.mcp.url} completed initialize but tools/list did "
-                f"not: {e!r}. The path is routable but the server is not "
-                f"speaking {revision.value} on it."
+                f"{url} completed initialize but tools/list did not: {e!r}. The "
+                f"path is routable but the server is not speaking "
+                f"{revision.value} on it."
             ) from e
         if not listed.tools:
             raise PackTargetError(
-                f"{pack.api.mcp.url} completed initialize but tools/list is "
-                f"empty — nothing for an arm to call. Check auth scope and that "
-                f"the deployed server exposes its tools on this path."
+                f"{url} completed initialize but tools/list is empty — nothing "
+                f"for an arm to call. Check auth scope and that the deployed "
+                f"server exposes its tools on this path."
             )
-        print(f"handshake ok: {pack.api.mcp.url} ({len(listed.tools)} tools)")
+        print(f"handshake ok: {url} ({len(listed.tools)} tools)")
         return revision, listed.tools
 
     url = _live_http_base(pack)
