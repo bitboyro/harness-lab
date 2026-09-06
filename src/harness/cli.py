@@ -331,29 +331,28 @@ def _verify_field_reachable(pack, args):
     rather than paying the handshake twice.
     """
     from .engine.axes import McpRevision
+    from .engine.mcp.transport import HttpTransport, TransportError, auth_headers_from_env
     requested = McpRevision(args.mcp_revision)
+
+    # The pack's credentials, resolved once and applied to every request the
+    # gate makes — MCP handshake and bare HTTP probe alike. A misconfigured
+    # `api.auth` (a header type with no name, a credential env var that is not
+    # set) raises TransportError; that is operator error, caught here so it
+    # surfaces as a PackTargetError and not a traceback.
+    try:
+        auth_headers = auth_headers_from_env(
+            pack.api.auth.type, pack.api.auth.env, pack.api.auth.header_name
+        )
+    except TransportError as e:
+        raise PackTargetError(
+            f"cannot resolve the pack's api.auth credentials: {e}. Fix the "
+            f"pack's api.auth or set the credential env var, then re-run."
+        ) from e
 
     if pack.api.mcp:
         from .engine.mcp import McpClient, detect_revision
-        from .engine.mcp.transport import HttpTransport, TransportError
 
-        # Build the authed transport once. `from_env` raises TransportError for
-        # a misconfigured `api.auth` (a header type with no name, a credential
-        # env var that is not set) — that is operator error, not a traceback.
-        try:
-            transport = HttpTransport.from_env(
-                pack.api.mcp.url,
-                auth_type=pack.api.auth.type,
-                auth_env=pack.api.auth.env,
-                header_name=pack.api.auth.header_name,
-            )
-        except TransportError as e:
-            raise PackTargetError(
-                f"cannot build the MCP transport for {pack.api.mcp.url}: {e}. "
-                f"Fix the pack's api.auth or set the credential env var, then "
-                f"re-run."
-            ) from e
-
+        transport = HttpTransport(url=pack.api.mcp.url, headers=dict(auth_headers))
         auto = pack.api.mcp.spec_revision == "auto"
         # One authed handshake does double duty: reachability and, for `auto`,
         # revision negotiation. Start on the revision that actually handshakes
@@ -410,10 +409,12 @@ def _verify_field_reachable(pack, args):
     if url:
         import urllib.error
         import urllib.request
+        req = urllib.request.Request(
+            url, method="GET",
+            headers={"User-Agent": "harness-lab", **auth_headers},
+        )
         try:
-            urllib.request.urlopen(
-                urllib.request.Request(url, method="GET"), timeout=10
-            ).close()
+            urllib.request.urlopen(req, timeout=10).close()
         except urllib.error.HTTPError:
             pass  # a status is the app's business; the path is reachable
         except (urllib.error.URLError, TimeoutError, OSError) as e:

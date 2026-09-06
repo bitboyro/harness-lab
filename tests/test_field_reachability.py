@@ -133,8 +133,11 @@ def test_unroutable_http_target_refuses_before_the_spend() -> None:
 
 
 def test_a_reachable_http_server_passes_even_on_404() -> None:
+    seen_auth: list[str | None] = []
+
     class _Quiet(http.server.BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
+            seen_auth.append(self.headers.get("Authorization"))
             self.send_response(404)
             self.end_headers()
 
@@ -149,3 +152,32 @@ def test_a_reachable_http_server_passes_even_on_404() -> None:
         assert tools is None
     finally:
         srv.shutdown()
+    assert seen_auth == [None]  # no auth configured, none sent
+
+
+def test_http_probe_sends_the_packs_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen_auth: list[str | None] = []
+
+    class _Quiet(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            seen_auth.append(self.headers.get("Authorization"))
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *_a) -> None:
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _Quiet)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    monkeypatch.setenv("FIELD_REACH_TOKEN", "s3cret")
+    try:
+        api = ApiTarget(
+            openapi=f"http://127.0.0.1:{srv.server_port}/openapi.json",
+            auth=Auth(type="bearer", env="FIELD_REACH_TOKEN"),
+        )
+        _verify_field_reachable(_pack(api), _ARGS)
+    finally:
+        srv.shutdown()
+    assert seen_auth == ["Bearer s3cret"]
